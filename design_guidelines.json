@@ -1,0 +1,122 @@
+{
+  "project": "Life Upgrade AI",
+  "context": "Hybrid fullstack, frontend-first local MVP",
+  "phase_1_discovery": {
+    "audience": "People who feel scattered across health, career, money, productivity, learning, and relationships and want a calm first step.",
+    "core_tasks": ["Start assessment", "Answer five short steps", "Understand life score", "See biggest opportunity", "Complete one next best action"],
+    "success_actions": ["assessment_started", "assessment_completed", "next_action_completed"],
+    "emotional_tone": "grounded optimism: clear enough to trust, warm enough to begin, quietly intelligent rather than futuristic",
+    "theme": "light, with a warm paper-like base and deep ink surfaces for contrast",
+    "design_context": "mobile/web app with a premium marketing entry screen and a focused personal dashboard",
+    "content_strategy": "Use direct second-person copy, short explanatory labels, honest mock-data language, and one behavioral action at a time. Never imply medical, financial, or scientific validation."
+  },
+  "phase_2_research": {
+    "references": [
+      {"source": "Landingfolio health landing pages", "url": "https://www.landingfolio.com/inspiration/landing-page/health", "descriptors": ["clear visual hierarchy", "trust-first wellness framing", "short conversion-led hero copy"]},
+      {"source": "Solace open-source wellness landing page", "url": "https://github.com/sharad-37/solace", "descriptors": ["modular section architecture", "sage/lime palette", "fade-up entrance motion", "accessible keyboard navigation"]},
+      {"source": "SaaSFrame dashboard patterns", "url": "https://www.saasframe.io/blog/the-anatomy-of-high-performance-saas-dashboard-design-2026-trends-patterns", "descriptors": ["north-star metric in top-left", "actionable dashboard hierarchy", "brief onboarding assessment", "persistent progress feedback"]},
+      {"source": "Goodly physical-digital wellness brand", "url": "https://thegoodly.com/", "descriptors": ["hybrid analog/digital warmth", "AI companion framed as supportive", "tactile editorial storytelling"]}
+    ],
+    "synthesis": "Borrow the trust and clarity of wellness editorial design, the measurable hierarchy of SaaS onboarding, and the tactile feeling of paper journaling; avoid clinical dashboards and generic neon AI gradients."
+  },
+  "design_directions": [
+    {"name": "Paper Signal", "probability": 0.34, "discipline_fusion": ["editorial print", "behavioral product design", "Swiss information design"], "description": "Warm bone canvas, black ink typography, red-orange signal accents, oversized score ring, and ruled micro-details. Best balance of premium, personal, and implementable."},
+    {"name": "Quiet Observatory", "probability": 0.24, "discipline_fusion": ["astronomical charts", "Japanese stationery", "calm fintech"], "description": "Off-white surfaces with midnight ink, thin orbit lines, constellation-like score components, and a single amber action. Best for reflective users."},
+    {"name": "Field Manual", "probability": 0.18, "discipline_fusion": ["outdoor field guides", "tactical interfaces", "humanist editorial"], "description": "Moss, clay, and charcoal accents with indexed labels, modular evidence blocks, and a decisive action panel. Best for users who want practical momentum."},
+    {"name": "The Personal Ledger", "probability": 0.14, "discipline_fusion": ["accounting ledgers", "modern magazine layout", "coaching UX"], "description": "Cream pages, cobalt ink, hairline dividers, and score columns that make life areas feel legible without feeling corporate."},
+    {"name": "Soft Brutalist Reset", "probability": 0.10, "discipline_fusion": ["neo-brutalist posters", "pastel packaging", "habit coaching"], "description": "Butter, pale mint, charcoal borders, and bold asymmetrical blocks. More playful and youth-oriented, while retaining strong contrast."}
+  ],
+  "chosen_direction": "Paper Signal",
+  "typography": {
+    "heading_font": "Cormorant Garamond",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "IBM Plex Mono",
+    "reason": "The serif gives the product a human, reflective voice; Plex Sans keeps ratings and actions operationally clear.",
+    "rules": ["Never use Inter, Roboto, Open Sans, or Lato for headings", "H1 max text-6xl with tracking-tight and leading-none", "H2 text-2xl to text-4xl", "Body text-base, relaxed leading", "Labels uppercase, text-xs, tracking-[0.2em]", "Use radical weight contrast: serif light/medium and sans semibold"]
+  },
+  "colors": {
+    "archetype": "organic_earthy with Swiss functional contrast",
+    "background": "#F4F0E8",
+    "surface": "#FFFCF6",
+    "ink": "#18201D",
+    "muted_ink": "#59615B",
+    "border": "#D9D4C9",
+    "primary": "#C94E32",
+    "primary_hover": "#A83D29",
+    "secondary": "#D7E2CC",
+    "highlight": "#E6B84C",
+    "success": "#35634A",
+    "score_track": "#E5DED1",
+    "rules": ["Use primary only for CTAs, score emphasis, and the active opportunity", "Do not use pure black or pure gray", "Use solid surfaces; no full-screen gradients", "Ensure normal text reaches 4.5:1 and large text 3:1 contrast", "Explicitly set hover and focus text colors"]
+  },
+  "visual_enhancers": {
+    "texture": "Subtle CSS grain/noise overlay at low opacity, aria-hidden, never reducing text contrast",
+    "decorative_language": ["hairline ruled dividers", "small registration marks", "offset editorial labels", "one oversized circular score visualization", "paper-like layered shadows"],
+    "avoid": ["generic purple AI gradients", "floating glass cards everywhere", "equal bento squares", "centered everything", "emoji icons", "clinical medical imagery"]
+  },
+  "component_name": {
+    "app_shell": "LifeUpgradeShell",
+    "navigation": "LifeUpgradeHeader",
+    "landing": "LandingHero",
+    "assessment": "AssessmentFlow",
+    "question_step": "AssessmentStep",
+    "score": "LifeScoreReveal",
+    "dashboard": "LifeDashboard",
+    "area_card": "LifeAreaCard",
+    "life_twin": "LifeTwinLite",
+    "next_action": "NextBestAction",
+    "progress": "TodayProgress",
+    "logic_modules": ["assessmentModel.js", "scoreEngine.js", "lifeTwinRules.js", "nextActionRules.js", "storage.js"]
+  },
+  "component_path": "/app/frontend/src/components/",
+  "layouts": {
+    "header": "Solid warm surface with bottom border; logo left, desktop links Assessment/Dashboard/How it works, primary CTA right; mobile menu only below md.",
+    "landing": "Asymmetric 8-column grid: copy spans 5 columns, score specimen spans 3; generous px-6 md:px-16 py-20; no extra marketing sections unless needed.",
+    "assessment": "Single focused column max-w-3xl, left-aligned step label and progress rail; one question per screen with generous p-8 surfaces.",
+    "score": "Score reveal uses a dominant left visual and right explanation on desktop; component scores flow as six direct grid children using 1/2/3 column responsive layout.",
+    "dashboard": "Dense but breathable 12-column Tetris-inspired layout: score summary col-span-8, opportunity col-span-4, area cards mixed spans, twin tall panel and next action anchored near the primary metric. Mobile collapses to one column.",
+    "footer": "Dark ink contrast shift, py-20, small practical links and a large LIFE UPGRADE AI wordmark.",
+    "responsive": "Mobile-first; images/decorative visuals max-h-[80vh] on mobile; never allow horizontal overflow."
+  },
+  "grids": {
+    "marketing": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-8 md:gap-12; leave intentional empty cells.",
+    "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6; use h-full on cards and direct grid children only.",
+    "area_cards": "Six compact cards with score number, label, 10-segment meter, and one-line insight; use color only to identify state, not as decoration.",
+    "borders": "Use 1px tinted borders, no heavy rounded cards; max rounded-lg for interactive surfaces."
+  },
+  "motion": {
+    "entrance": "Staggered fade-up 280ms with 40ms offsets for assessment and dashboard blocks.",
+    "interaction": "Buttons transition background-color, color, border-color, and transform specifically; press scale 0.98; area cards lift 2px on hover.",
+    "score": "Animate score ring stroke-dashoffset and number count once on reveal; provide final value in text for accessibility.",
+    "loading": "Use a short deterministic 'mapping your answers' state only if it supports the reveal, never fake an external AI request.",
+    "reduced_motion": "@media (prefers-reduced-motion: reduce) disables transforms, stagger, and count animation while retaining state changes."
+  },
+  "accessibility": {
+    "requirements": ["Every button, link, input, selectable option, score, progress indicator, insight, and confirmation has a stable data-testid in kebab-case", "Use visible focus-visible rings with high contrast", "Use fieldset/legend for grouped assessment questions", "Use aria-live for score reveal, success message, and progress completion", "Do not rely on color alone for score state", "Maintain logical heading order and keyboard operation", "Respect reduced motion", "Use explicit hover text colors"]
+  },
+  "media": {
+    "needed": false,
+    "image_urls": [],
+    "direction": "No external images are necessary for this MVP. Use CSS texture and typographic score specimen instead of stock wellness imagery. Do not use placeholder URLs."
+  },
+  "3d_libraries": {
+    "use": false,
+    "reason": "This journey needs clarity and trust, not immersion. Keep the MVP fast and deterministic.",
+    "future_option": "A lightweight SVG/D3 score orbit could be introduced later, but the current score ring should be CSS/SVG without external API data."
+  },
+  "implementation_guidance_js": {
+    "framework": "React JavaScript files (.js/.jsx), Tailwind CSS, existing shadcn primitives",
+    "forms": "Use existing shadcn Input, Textarea, Checkbox, Select, Button, Progress, and Sonner. Do not create native select/date-picker replacements.",
+    "state": "Keep assessment state in a reusable model; persist completed assessment, score, dashboard data, and action completion in localStorage only.",
+    "logic": "Overall score is the average of six 1-10 ratings multiplied by 10 and rounded. Biggest opportunity is lowest selected-area score; deterministic tie-break by configured area order. Next action combines goal, obstacle, and opportunity.",
+    "mocking": "MOCKED: Life Twin insights are explicitly rule-based local observations, not an AI model. No external API integrations are present or required.",
+    "testing": "Add data-testid to all key flows, for example assessment-start-button, assessment-step-input, assessment-next-button, life-score-value, life-area-card-health, next-action-complete-button, action-success-message."
+  },
+  "image_urls": {
+    "hero": {"category": "none", "description": "No image; use typographic editorial composition and an abstract CSS score specimen."},
+    "dashboard": {"category": "none", "description": "No image; use score ring, rule marks, and compact life area data."},
+    "logos": {"category": "none", "description": "Text wordmark LIFE UPGRADE AI only; no sponsor or partner logos."}
+  },
+  "instructions_to_main_agent": ["Build the complete landing-to-action journey without asking for clarification.", "Keep the first build intentionally small and local-first.", "Use direct HTML/Tailwind structure for composition and shadcn primitives for interactive controls.", "Do not add integrations, auth complexity, payments, social features, or external APIs.", "Preserve the chosen Paper Signal visual identity and honest rule-based language.", "Do not use transparent backgrounds under content; headers and overlays must be solid or blurred surfaces.", "Avoid centered app-wide text alignment; use left-aligned editorial flow with asymmetry.", "Ensure every interactive and key informational element has data-testid.", "Use Sonner for completion feedback.", "Do not claim scientific, medical, financial, or predictive validity."] ,
+  "GENERAL UI UX DESIGN GUIDELINES": ["Prioritize one clear next action per screen.", "Use generous spacing, layered but restrained depth, and strong contrast.", "Make empty states instructive rather than decorative.", "Keep score and opportunity visible without making the dashboard feel like an admin panel.", "Use micro-interactions on hover, focus, click, and entrance; never use transition-all.", "Make the journey understandable without relying on color or animation.", "Keep copy concise, humane, and specific to the user's answers.", "Test mobile at narrow widths and keyboard navigation before handoff."]
+}
