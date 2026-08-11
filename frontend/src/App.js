@@ -1,41 +1,71 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Compass, RotateCcw, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import "@/App.css";
-import { blankAssessment, CONSISTENCY, LIFE_AREAS, OBSTACLES } from "@/logic/assessmentModel";
-import { calculateScore, getInsight, getLowestArea } from "@/logic/scoreEngine";
-import { buildTwinInsights } from "@/logic/lifeTwinRules";
-import { buildNextAction } from "@/logic/nextActionRules";
+import { blankAssessment } from "@/logic/assessmentModel";
+import { buildNextAction, calculateScore } from "@/logic/intelligenceEngine";
 import { clearState, loadState, saveState } from "@/logic/storage";
-
-const steps = ["The intention", "Your focus", "The temperature", "The friction", "Your rhythm"];
+import Landing from "@/components/screens/Landing";
+import Assessment from "@/components/screens/Assessment";
+import Dashboard from "@/components/screens/Dashboard";
 
 function Header({ onStart, onReset }) {
-  return <header className="site-header"><button className="wordmark" data-testid="brand-home-button" onClick={onReset}><span className="wordmark-mark">+ </span>LIFE UPGRADE <em>AI</em></button><nav><button data-testid="header-assessment-button" onClick={onStart}>Assessment <ArrowRight size={15} /></button></nav></header>;
+  return (
+    <header className="site-header">
+      <button className="wordmark" data-testid="brand-home-button" onClick={onReset}>
+        <span className="wordmark-mark">+ </span>LIFE UPGRADE <em>AI</em>
+      </button>
+      <nav>
+        <button data-testid="header-assessment-button" onClick={onStart}>
+          Assessment <ArrowRight size={15} />
+        </button>
+      </nav>
+    </header>
+  );
 }
 
-function Landing({ onStart }) {
-  return <main className="landing page-enter"><section className="hero-copy"><p className="eyebrow">A personal operating system for your life <span>01 / 05</span></p><h1>Know where<br /><i>you are.</i><br />Know what<br /><i>to do next.</i></h1><p className="hero-description">A calm, personal starting point for improving the areas of life that matter most.</p><button className="primary-button" data-testid="assessment-start-button" onClick={onStart}>Start my free AI life assessment <ArrowRight size={18} /></button></section><aside className="score-specimen" aria-label="Life score preview" data-testid="landing-score-preview"><div className="specimen-top"><span>YOUR LIFE SCORE</span><span>06 areas</span></div><div className="score-orbit"><div className="orbit-ring"><strong>76</strong><small>/ 100</small></div><span className="orbit-label label-one">CAREER <b>74</b></span><span className="orbit-label label-two">HEALTH <b>82</b></span><span className="orbit-label label-three">MONEY <b>69</b></span></div><p>See the shape of your life<br />before choosing your next move.</p></aside><div className="hero-foot"><span>NO ACCOUNT REQUIRED</span><span>LOCAL & PRIVATE</span><span>BUILT FOR ONE GOOD NEXT STEP</span></div></main>;
+export default function App() {
+  const [screen, setScreen] = useState("landing");
+  const [assessment, setAssessment] = useState(blankAssessment);
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    const stored = loadState();
+    if (stored) {
+      setData(stored);
+      setAssessment(stored.assessment);
+      setScreen("dashboard");
+    }
+  }, []);
+
+  const complete = () => {
+    const score = calculateScore(assessment.ratings);
+    const action = buildNextAction(assessment);
+    const next = { assessment, score, action, completed: false };
+    saveState(next);
+    setData(next);
+    setScreen("dashboard");
+  };
+
+  const reset = () => {
+    clearState();
+    setAssessment(blankAssessment);
+    setData(null);
+    setScreen("landing");
+  };
+
+  return (
+    <div className="app-shell">
+      <Header onStart={() => setScreen("assessment")} onReset={reset} />
+      {screen === "landing" && <Landing onStart={() => setScreen("assessment")} />}
+      {screen === "assessment" && (
+        <Assessment
+          assessment={assessment}
+          setAssessment={setAssessment}
+          onComplete={complete}
+          onBack={() => setScreen("landing")}
+        />
+      )}
+      {screen === "dashboard" && data && <Dashboard data={data} onReset={reset} setData={setData} />}
+    </div>
+  );
 }
-
-function Assessment({ assessment, setAssessment, onComplete, onBack }) {
-  const [step, setStep] = useState(0);
-  const canContinue = step === 0 ? assessment.goal.trim().length > 0 : step === 1 ? assessment.selectedAreas.length > 0 : step === 3 ? !!assessment.obstacle : step === 4 ? !!assessment.consistency : true;
-  const update = (key, value) => setAssessment((current) => ({ ...current, [key]: value }));
-  const next = () => step === steps.length - 1 ? onComplete() : setStep((value) => value + 1);
-  return <main className="assessment-page page-enter"><div className="assessment-heading"><button className="back-button" data-testid="assessment-back-button" onClick={step ? () => setStep(step - 1) : onBack}><ChevronLeft size={17} /> Back</button><p className="eyebrow">Free AI life assessment</p><span className="step-count" data-testid="assessment-step-count">0{step + 1} / 05</span></div><div className="progress-line"><span style={{ width: `${((step + 1) / steps.length) * 100}%` }} /></div><section className="question-block"><p className="question-index">Question 0{step + 1}</p><h2>{steps[step]}</h2>{step === 0 && <div className="field-wrap"><label htmlFor="goal">What is your biggest goal right now?</label><textarea id="goal" data-testid="assessment-goal-input" value={assessment.goal} onChange={(event) => update("goal", event.target.value)} placeholder="I want to improve my career, health, finances, productivity..." autoFocus /></div>}{step === 1 && <fieldset><legend>Which areas do you want to improve?</legend><div className="option-grid">{LIFE_AREAS.map((area) => <label className={`select-option ${assessment.selectedAreas.includes(area.key) ? "selected" : ""}`} key={area.key} data-testid={`area-select-${area.key}`}><input type="checkbox" checked={assessment.selectedAreas.includes(area.key)} onChange={() => update("selectedAreas", assessment.selectedAreas.includes(area.key) ? assessment.selectedAreas.filter((key) => key !== area.key) : [...assessment.selectedAreas, area.key])} /><span>{area.icon}</span>{area.label}<Check size={16} /></label>)}</div></fieldset>}{step === 2 && <fieldset><legend>Rate each area from 1–10.</legend><div className="ratings-list">{LIFE_AREAS.map((area) => <label className="rating-row" key={area.key} data-testid={`rating-row-${area.key}`}><span><b>{area.icon}</b>{area.label}</span><output data-testid={`rating-value-${area.key}`}>{assessment.ratings[area.key]}</output><input aria-label={`${area.label} rating`} data-testid={`rating-input-${area.key}`} type="range" min="1" max="10" value={assessment.ratings[area.key]} onChange={(event) => update("ratings", { ...assessment.ratings, [area.key]: Number(event.target.value) })} /></label>)}</div></fieldset>}{step === 3 && <fieldset><legend>What is your biggest obstacle?</legend><div className="choice-list">{OBSTACLES.map((item) => <label className={`radio-option ${assessment.obstacle === item ? "selected" : ""}`} key={item} data-testid={`obstacle-option-${item.toLowerCase().replaceAll(" ", "-")}`}><input type="radio" name="obstacle" checked={assessment.obstacle === item} onChange={() => update("obstacle", item)} />{item}<span /></label>)}</div></fieldset>}{step === 4 && <fieldset><legend>How consistent are you with your goals?</legend><div className="consistency-grid">{CONSISTENCY.map((item, index) => <label className={`consistency-option ${assessment.consistency === item ? "selected" : ""}`} key={item} data-testid={`consistency-option-${item.toLowerCase().replaceAll(" ", "-")}`}><input type="radio" name="consistency" checked={assessment.consistency === item} onChange={() => update("consistency", item)} /><small>0{index + 1}</small><b>{item}</b></label>)}</div></fieldset>}<div className="question-footer"><span>{step === 4 ? "Ready to map your pattern?" : "Take your time — this is just for you."}</span><button className="primary-button" data-testid={step === 4 ? "generate-life-score-button" : "assessment-next-button"} disabled={!canContinue} onClick={next}>{step === 4 ? "Generate my life score" : "Continue"}<ChevronRight size={18} /></button></div></section></main>;
-}
-
-function ScoreRing({ score }) { const circumference = 2 * Math.PI * 94; return <div className="dashboard-ring" data-testid="life-score-visual"><svg viewBox="0 0 220 220" role="img" aria-label={`Life score ${score} out of 100`}><circle className="ring-track" cx="110" cy="110" r="94" /><circle className="ring-value" cx="110" cy="110" r="94" style={{ strokeDasharray: circumference, strokeDashoffset: circumference - (score / 100) * circumference }} /></svg><div className="ring-text"><strong data-testid="life-score-value" aria-live="polite">{score}</strong><span>/ 100</span></div></div>; }
-
-function AreaCard({ area, score }) { return <article className="area-card" data-testid={`life-area-card-${area.key}`}><div className="area-card-top"><span className="area-icon">{area.icon}</span><span className="area-score" data-testid={`life-area-score-${area.key}`}>{score}<small>/10</small></span></div><h3>{area.label}</h3><div className="meter"><span style={{ width: `${score * 10}%` }} /></div><p>{getInsight(score)}</p></article>; }
-
-function Dashboard({ data, onReset, setData }) {
-  const { assessment, score, action, completed } = data;
-  const lowest = getLowestArea(assessment.ratings);
-  const insights = useMemo(() => buildTwinInsights(assessment), [assessment]);
-  const markComplete = () => { const next = { ...data, completed: true }; saveState(next); setData(next); window.dispatchEvent(new CustomEvent("life-action-complete")); };
-  return <main className="dashboard page-enter"><div className="dashboard-heading"><div><p className="eyebrow">Your personal readout <span>·</span> Today</p><h1>My life, <i>in motion.</i></h1></div><button className="reset-button" data-testid="start-over-button" onClick={onReset}><RotateCcw size={15} /> Start over</button></div><section className="dashboard-grid"><article className="score-panel panel"><div className="panel-label"><span>01</span><b>Life score</b><span>AI-GENERATED / PERSONAL</span></div><div className="score-panel-content"><ScoreRing score={score} /><div className="score-summary"><p className="score-kicker">A starting point, not a verdict.</p><h2 data-testid="life-score-heading">YOUR LIFE SCORE</h2><p>Based on your responses across six areas, your current shape is <strong>{score >= 70 ? "full of momentum" : "ready for a reset"}.</strong></p><small data-testid="life-score-disclaimer">AI-generated personal assessment score based on your responses. Not scientifically validated.</small></div></div></article><article className="opportunity-panel panel" data-testid="biggest-opportunity-card"><div className="panel-label"><span>02</span><b>Your opening</b></div><Compass size={28} /><p>Your biggest opportunity right now is</p><h2 data-testid="biggest-opportunity-value">{lowest.label}.</h2><span className="opportunity-score">{assessment.ratings[lowest.key]} / 10 · room to grow</span></article><section className="areas-section"><div className="section-heading"><div><p className="eyebrow">The six signals</p><h2>Life areas</h2></div><span>YOUR RESPONSES</span></div><div className="area-grid">{LIFE_AREAS.map((area) => <AreaCard key={area.key} area={area} score={assessment.ratings[area.key]} />)}</div></section><article className="twin-panel panel" data-testid="life-twin-section"><div className="panel-label"><span>03</span><b>Your AI Life Twin</b><Sparkles size={16} /></div><h2>Patterns worth<br /><i>noticing.</i></h2><p className="twin-subtitle">Learning from your goals and assessment</p><ol>{insights.map((insight, index) => <li key={insight} data-testid={`life-twin-insight-${index + 1}`}><span>0{index + 1}</span>{insight}</li>)}</ol></article><article className={`action-panel panel ${completed ? "completed" : ""}`} data-testid="next-best-action-section"><div className="panel-label"><span>04</span><b>Your next best action</b><span>{completed ? "COMPLETE" : "FOR TODAY"}</span></div><div className="action-content"><div className="action-mark">{completed ? <Check size={28} /> : <span>→</span>}</div><div><p data-testid="next-action-label">{completed ? "One good move, made." : "Make it small. Make it real."}</p><h2 data-testid="next-action-text" aria-live="polite">{completed ? "Great! You&apos;ve completed your first Life Upgrade action." : action}</h2>{!completed && <button className="primary-button" data-testid="next-action-complete-button" onClick={markComplete}>Mark complete <Check size={17} /></button>}</div></div></article><article className="progress-panel panel" data-testid="today-progress-section"><div className="panel-label"><span>05</span><b>Today&apos;s progress</b></div><div className="progress-stat"><strong data-testid="today-progress-value" aria-live="polite">{completed ? "1 / 1" : "0 / 1"}</strong><span>action completed</span></div><div className="progress-bar"><span style={{ width: completed ? "100%" : "0%" }} /></div><div className="streak"><span>✦</span><b data-testid="streak-value">{completed ? "1 Day" : "0 Days"}</b><small>Keep the signal going.</small></div></article></section><footer className="dashboard-footer"><span>LIFE UPGRADE AI</span><span>Know where you are. Know what to do next.</span></footer></main>;
-}
-
-function App() { const [screen, setScreen] = useState("landing"); const [assessment, setAssessment] = useState(blankAssessment); const [data, setData] = useState(null); useEffect(() => { const stored = loadState(); if (stored) { setData(stored); setAssessment(stored.assessment); setScreen("dashboard"); } }, []); const complete = () => { const score = calculateScore(assessment.ratings); const lowestArea = getLowestArea(assessment.ratings); const next = { assessment, score, action: buildNextAction({ ...assessment, lowestArea }), completed: false }; saveState(next); setData(next); setScreen("dashboard"); }; const reset = () => { clearState(); setAssessment(blankAssessment); setData(null); setScreen("landing"); }; return <div className="app-shell"><Header onStart={() => setScreen("assessment")} onReset={reset} />{screen === "landing" && <Landing onStart={() => setScreen("assessment")} />}{screen === "assessment" && <Assessment assessment={assessment} setAssessment={setAssessment} onComplete={complete} onBack={() => setScreen("landing")} />}{screen === "dashboard" && data && <Dashboard data={data} onReset={reset} setData={setData} />}</div>; }
-export default App;
