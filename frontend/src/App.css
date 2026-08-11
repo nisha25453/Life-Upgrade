@@ -770,6 +770,253 @@ fieldset { border: 0; padding: 0; margin: 0 0 22px; }
 }
 .dashboard-footer b { color: var(--red); font-weight: 500; }
 
+/* ============================================================
+   INTELLIGENCE LAYER v2 — new panels (current state, priorities,
+   horizons, tier badges, improving state, upgrade notice)
+   Kept additive — no existing panel visuals were removed.
+   ============================================================ */
+
+.upgrade-notice {
+  border: 1px solid var(--red);
+  background: #fff4eb;
+  padding: 14px 16px;
+  margin: 0 0 30px;
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 460px;
+  border-radius: 2px;
+}
+.upgrade-notice strong { color: var(--red); font-weight: 600; margin-right: 4px; }
+
+/* MY CURRENT STATE */
+.current-state-panel { grid-column: 1 / -1; background: var(--sage); }
+.current-state-panel h2 {
+  font: 500 clamp(30px, 4vw, 46px)/.95 'Cormorant Garamond', serif;
+  margin: 6px 0 14px;
+  max-width: 720px;
+}
+.current-state-panel p { font-size: 15px; line-height: 1.65; max-width: 780px; margin: 0 0 18px; color: var(--ink); }
+.current-state-meta { display: flex; flex-wrap: wrap; gap: 22px; }
+.current-state-meta span {
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .14em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.current-state-meta b {
+  font-family: 'IBM Plex Sans', sans-serif;
+  color: var(--red);
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: none;
+  margin-left: 6px;
+}
+
+/* TOP 3 PRIORITIES */
+.top-three-panel { grid-column: 1 / -1; }
+.priority-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.priority-card {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 2px;
+  position: relative;
+  transition: border-color .2s;
+}
+.priority-card:hover { border-color: var(--red); }
+.priority-card.completed { background: #f4f8f1; border-color: var(--green); opacity: .95; }
+.priority-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+.tier-badge {
+  padding: 4px 10px;
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .12em;
+  border-radius: 2px;
+  color: #fff;
+}
+.tier-urgent { background: var(--red); }
+.tier-important { background: var(--ink); }
+.tier-opportunity { background: var(--yellow); color: var(--ink); }
+.priority-area { font-family: 'Cormorant Garamond', serif; font-size: 20px; }
+.priority-score { font: 22px 'IBM Plex Mono', monospace; color: var(--red); }
+.priority-score small { font-size: 10px; color: var(--muted); margin-left: 2px; }
+.priority-detail { margin: 0; display: grid; gap: 10px; }
+.priority-detail > div { display: grid; gap: 3px; }
+.priority-detail dt {
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .12em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.priority-detail dd { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.priority-benefit { color: var(--green); }
+.priority-consequence { color: var(--red-dark); }
+.priority-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+.priority-foot .source-link { font-size: 12px; }
+.priority-foot .source-meta { font-size: 10px; }
+.ghost-button, .priority-done {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color .2s, color .2s;
+}
+.ghost-button:hover { background: var(--red); color: #fff; }
+.priority-done {
+  cursor: default;
+  border-color: var(--green);
+  color: var(--green);
+  background: #ecf1e7;
+}
+.priority-disclaimer { font-size: 10px; color: var(--muted); line-height: 1.5; margin-top: 4px; }
+
+/* Improving badge */
+.level-badge.improving {
+  background: rgba(53, 99, 74, .18);
+  color: var(--green);
+  border-color: rgba(53, 99, 74, .4);
+}
+.improving-suffix {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: none;
+  margin-left: 4px;
+  opacity: .85;
+}
+
+/* Rating anchors below the sliders */
+.rating-anchors {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .12em;
+  color: var(--muted);
+}
+
+/* Next Action if-you-do / if-you-don't blocks */
+.action-if dt { color: #f2c2b6; }
+.action-followup { font-size: 13px; line-height: 1.5; margin: 8px 0 0; color: #fff; opacity: .9; }
+
+/* Future Self · horizons + scenarios */
+.horizon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.horizon-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 2px;
+}
+.horizon-label {
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .14em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.horizon-projected { display: flex; align-items: baseline; gap: 4px; }
+.horizon-projected span { font: 500 34px/.85 'Cormorant Garamond', serif; color: var(--red); }
+.horizon-projected b { font: 10px 'IBM Plex Mono', monospace; color: var(--muted); }
+.horizon-card p { font-size: 11px; line-height: 1.5; color: var(--muted); margin: 0; }
+
+.future-trend-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 22px;
+  padding: 10px 14px;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+  border-radius: 2px;
+}
+.future-trend-note svg { color: var(--red); }
+
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.scenario-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 2px;
+}
+.scenario-label {
+  font: 10px 'IBM Plex Mono', monospace;
+  letter-spacing: .14em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.scenario-numbers { display: flex; align-items: baseline; gap: 10px; }
+.scenario-numbers span { font: 500 42px/.9 'Cormorant Garamond', serif; }
+.scenario-numbers b { font: 12px 'IBM Plex Mono', monospace; color: var(--red); }
+.scenario-card p { font-size: 12px; line-height: 1.5; color: var(--muted); margin: 0; }
+.scenario-upgrade { background: #fff; border-color: var(--red); }
+.scenario-upgrade .scenario-numbers span { color: var(--red); }
+.scenario-neglect .scenario-numbers b { color: var(--muted); }
+
+/* Future panel full-width slot */
+.future-panel { grid-column: 1 / -1; background: var(--amber-surface); border-color: #e2c8b7; }
+
+/* Areas grid — cards always show detail inline now (no expand toggle) */
+.area-card { display: flex; flex-direction: column; }
+.area-card-header { padding: 18px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px dashed var(--line); }
+.area-card em { font-style: normal; color: var(--red); font-size: 11px; margin-left: 4px; }
+.area-detail { padding: 18px; }
+
+@media (max-width: 1180px) {
+  .priority-grid { grid-template-columns: 1fr; }
+  .horizon-grid { grid-template-columns: repeat(2, 1fr); }
+  .scenario-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .horizon-grid { grid-template-columns: 1fr; }
+  .current-state-meta { gap: 10px; }
+}
+
 /* Animation */
 .page-enter { animation: rise .5s ease both; }
 @keyframes rise {

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import "@/App.css";
-import { blankAssessment } from "@/logic/assessmentModel";
+import { blankAssessment, SCHEMA_VERSION } from "@/logic/assessmentModel";
 import { buildNextAction, calculateScore } from "@/logic/intelligenceEngine";
-import { clearState, loadState, saveState } from "@/logic/storage";
+import { clearState, consumeUpgradedFlag, loadState, saveState } from "@/logic/storage";
 import Landing from "@/components/screens/Landing";
 import Assessment from "@/components/screens/Assessment";
 import Dashboard from "@/components/screens/Dashboard";
@@ -27,6 +27,7 @@ export default function App() {
   const [screen, setScreen] = useState("landing");
   const [assessment, setAssessment] = useState(blankAssessment);
   const [data, setData] = useState(null);
+  const [upgraded, setUpgraded] = useState(false);
 
   useEffect(() => {
     const stored = loadState();
@@ -34,29 +35,39 @@ export default function App() {
       setData(stored);
       setAssessment(stored.assessment);
       setScreen("dashboard");
+    } else if (consumeUpgradedFlag()) {
+      setUpgraded(true);
     }
   }, []);
 
   const complete = () => {
-    const score = calculateScore(assessment.ratings);
-    const action = buildNextAction(assessment);
-    const next = { assessment, score, action, completed: false };
+    const scored = { ...assessment, schemaVersion: SCHEMA_VERSION };
+    const score = calculateScore(scored.ratings);
+    const actions = {};
+    const nba = buildNextAction(scored, actions);
+    const next = { assessment: scored, score, action: nba, actions };
     saveState(next);
     setData(next);
     setScreen("dashboard");
+  };
+
+  const updateData = (nextData) => {
+    saveState(nextData);
+    setData(nextData);
   };
 
   const reset = () => {
     clearState();
     setAssessment(blankAssessment);
     setData(null);
+    setUpgraded(false);
     setScreen("landing");
   };
 
   return (
     <div className="app-shell">
       <Header onStart={() => setScreen("assessment")} onReset={reset} />
-      {screen === "landing" && <Landing onStart={() => setScreen("assessment")} />}
+      {screen === "landing" && <Landing onStart={() => setScreen("assessment")} upgraded={upgraded} />}
       {screen === "assessment" && (
         <Assessment
           assessment={assessment}
@@ -65,7 +76,7 @@ export default function App() {
           onBack={() => setScreen("landing")}
         />
       )}
-      {screen === "dashboard" && data && <Dashboard data={data} onReset={reset} setData={setData} />}
+      {screen === "dashboard" && data && <Dashboard data={data} onReset={reset} setData={updateData} />}
     </div>
   );
 }

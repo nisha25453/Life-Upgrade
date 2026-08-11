@@ -1,13 +1,20 @@
-// Kept as a stable public API used across screens. Delegates to intelligenceEngine.
+// Stable public API — delegates to the intelligence engine.
 export {
   calculateScore,
-  getLowestArea,
+  averageRating,
   getStrongestArea,
+  getMostUrgentArea,
+  getLowestArea,
   getInsight,
-  getTopOpportunities,
+  dimensionLabel,
+  buildCurrentState,
+  getTopThreePriorities,
   buildTwinInsights,
   buildNextAction,
+  buildFutureHorizons,
   buildFutureScenarios,
   buildRiskRadar,
   getDimensionSummary,
+  getPrimaryObstacle,
+  getObstacleSummary,
 } from "./intelligenceEngine";

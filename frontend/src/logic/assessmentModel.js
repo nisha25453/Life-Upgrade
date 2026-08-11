@@ -1,3 +1,5 @@
+export const SCHEMA_VERSION = 2;
+
 export const LIFE_AREAS = [
   { key: "health", label: "Health", icon: "✦" },
   { key: "career", label: "Career", icon: "↗" },
@@ -19,16 +21,25 @@ export const FRICTIONS = {
   relationships: ["Communication", "Conflict", "Trust", "Boundaries", "Lack of time", "Misunderstanding", "Stress", "Emotional distance"],
 };
 
+export const MONEY_GOAL_OPTIONS = [
+  "Savings", "Emergency fund", "SIP / mutual funds", "Retirement", "Life insurance",
+  "Health insurance", "Debt reduction", "Wealth creation", "Tax planning", "Education", "Home purchase",
+];
+
 const fieldDefaults = {
   health: { sleep: "", energy: "", stress: "", exercise: "", frictions: [] },
   career: { designation: "", years: "", industry: "", targetRole: "", skills: "", resume: "", goal: "", frictions: [] },
-  money: { savings: "", emergency: "", debt: "", investments: "", goals: "", frictions: [] },
+  money: { savings: "", emergency: "", debt: "", investments: "", moneyGoals: [], frictions: [] },
   productivity: { focusHours: "", energyPeriod: "", postponing: "", unfinished: "", frictions: [] },
   learning: { targetSkill: "", time: "", format: "", goal: "", frictions: [] },
   relationships: { area: "", focus: "", notes: "", frictions: [] },
 };
 
+// NOTE — SCORING SEMANTICS (v2, 2026-02-11):
+// 1 = STRONGEST, 10 = NEEDS MOST ATTENTION.
+// Sliders default to 5 (moderate); intelligence engine ranks priority by rating (higher = more urgent).
 export const blankAssessment = {
+  schemaVersion: SCHEMA_VERSION,
   goal: "",
   selectedAreas: LIFE_AREAS.map((area) => area.key),
   ratings: { health: 5, career: 5, money: 5, productivity: 5, learning: 5, relationships: 5 },

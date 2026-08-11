@@ -201,7 +201,9 @@ export default function Assessment({ assessment, setAssessment, onComplete, onBa
 
         {current.key === "ratings" && (
           <fieldset>
-            <legend>Rate each area from 1–10.</legend>
+            <legend>
+              Rate each area from 1 to 10. <span className="legend-hint">1 = strongest · 10 = needs most attention.</span>
+            </legend>
             <div className="ratings-list">
               {LIFE_AREAS.map((area) => (
                 <label className="rating-row" key={area.key} data-testid={`rating-row-${area.key}`}>
@@ -223,6 +225,11 @@ export default function Assessment({ assessment, setAssessment, onComplete, onBa
                   />
                 </label>
               ))}
+              <div className="rating-anchors" aria-hidden="true">
+                <span>1 · Strong</span>
+                <span>5 · Moderate</span>
+                <span>10 · Critical</span>
+              </div>
             </div>
           </fieldset>
         )}

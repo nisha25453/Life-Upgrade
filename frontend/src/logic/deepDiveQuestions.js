@@ -1,4 +1,4 @@
-import { FRICTIONS } from "./assessmentModel";
+import { FRICTIONS, MONEY_GOAL_OPTIONS } from "./assessmentModel";
 
 // Deep-dive schema per dimension. Each item renders as a compact row inside a single step.
 export const DEEP_DIVE = {
@@ -35,7 +35,7 @@ export const DEEP_DIVE = {
       { key: "emergency", label: "Emergency fund status", type: "radio", options: ["None", "Less than 1 month", "1–3 months", "3–6 months", "6+ months"] },
       { key: "debt", label: "Do you have high-interest debt?", type: "radio", options: ["Yes", "Some", "No"] },
       { key: "investments", label: "Do you invest regularly?", type: "radio", options: ["None", "Occasional", "Regular"] },
-      { key: "goals", label: "Primary money goal", type: "radio", options: ["Emergency fund", "Pay off debt", "Invest for future", "Buy a home", "Retirement planning"] },
+      { key: "moneyGoals", label: "Money goals (select all that apply)", type: "multi", options: MONEY_GOAL_OPTIONS },
       { key: "frictions", label: "What's slowing your money goals? (select any)", type: "multi", options: FRICTIONS.money },
     ],
   },
@@ -78,8 +78,8 @@ export const isDeepDiveComplete = (assessment, key) => {
   if (!schema) return true;
   return schema.fields.every((field) => {
     const value = assessment[key]?.[field.key];
-    if (field.type === "multi") return true; // frictions optional
-    if (field.type === "textarea") return true; // notes/resume optional
+    if (field.type === "multi") return true; // multi-select fields are optional at gate level
+    if (field.type === "textarea") return true;
     if (field.type === "text" && (field.key === "resume" || field.key === "notes")) return true;
     return value !== undefined && value !== null && String(value).trim() !== "";
   });

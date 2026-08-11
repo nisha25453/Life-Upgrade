@@ -1,151 +1,338 @@
 import { LIFE_AREAS } from "./assessmentModel";
+import { DISCLAIMER, getBehaviour, getPrimarySource, getSources } from "./recommendationCatalog";
+
+// =============================================================================
+// SCORING SEMANTICS (v2)
+// -----------------------------------------------------------------------------
+//   1 = strongest / lowest need for attention
+//   10 = weakest / highest need for attention
+//
+// Dimension score interpretation:
+//   1–2  strong
+//   3–4  good
+//   5–6  moderate
+//   7–8  needs attention
+//   9–10 critical priority
+//
+// The Life Score displayed as X / 100 stays "higher is better" (inverted from
+// the 1–10 dimension scale) so the headline number matches user intuition.
+// =============================================================================
 
 // ---------- Base scoring ----------
-export const calculateScore = (ratings) =>
-  Math.round((Object.values(ratings).reduce((sum, value) => sum + Number(value), 0) / 6) * 10);
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
-export const getLowestArea = (ratings) =>
-  LIFE_AREAS.reduce((low, area) => (Number(ratings[area.key]) < Number(ratings[low.key]) ? area : low), LIFE_AREAS[0]);
+export const averageRating = (ratings) =>
+  Object.values(ratings).reduce((sum, value) => sum + Number(value), 0) / 6;
+
+export const calculateScore = (ratings) => {
+  const avg = averageRating(ratings);
+  // Map 1 → 100, 5.5 → 50, 10 → 0.
+  return Math.round(clamp((10 - avg) * 100 / 9, 0, 100));
+};
 
 export const getStrongestArea = (ratings) =>
-  LIFE_AREAS.reduce((s, area) => (Number(ratings[area.key]) > Number(ratings[s.key]) ? area : s), LIFE_AREAS[0]);
+  LIFE_AREAS.reduce((best, area) => (Number(ratings[area.key]) < Number(ratings[best.key]) ? area : best), LIFE_AREAS[0]);
 
-export const getInsight = (score) =>
-  score >= 8 ? "A steady foundation to build from." : score >= 5 ? "A clear opportunity for your next small move." : "A gentle place to begin with one small step.";
+export const getMostUrgentArea = (ratings) =>
+  LIFE_AREAS.reduce((most, area) => (Number(ratings[area.key]) > Number(ratings[most.key]) ? area : most), LIFE_AREAS[0]);
 
-const frictionsFor = (assessment, key) => (assessment[key] && assessment[key].frictions) || [];
+// Backward-compatible alias (was `getLowestArea` under old semantics).
+export const getLowestArea = getMostUrgentArea;
 
-// Read the multi-select obstacles array (with legacy string fallback for safety).
+export const dimensionLabel = (rating) => {
+  const r = Number(rating);
+  if (r <= 2) return "Strong";
+  if (r <= 4) return "Good";
+  if (r <= 6) return "Moderate";
+  if (r <= 8) return "Needs attention";
+  return "Critical priority";
+};
+
+export const getInsight = (rating) => {
+  const r = Number(rating);
+  if (r <= 2) return "Currently strong — a useful anchor for other areas.";
+  if (r <= 4) return "Broadly good — protect what is working.";
+  if (r <= 6) return "Moderate — small, specific moves compound fastest here.";
+  if (r <= 8) return "Needs attention — a scheduled action this week would matter.";
+  return "Critical priority — treat this as the next focus.";
+};
+
+// ---------- Obstacle helpers ----------
 const getObstacleList = (assessment) => {
   if (Array.isArray(assessment.obstacles)) return assessment.obstacles;
   if (typeof assessment.obstacle === "string" && assessment.obstacle.trim()) return [assessment.obstacle];
   return [];
 };
-
 export const getPrimaryObstacle = (assessment) => getObstacleList(assessment)[0] || "";
-
 export const getObstacleSummary = (assessment) => {
   const list = getObstacleList(assessment);
   if (list.length === 0) return "";
   if (list.length === 1) return list[0].toLowerCase();
   if (list.length === 2) return `${list[0].toLowerCase()} and ${list[1].toLowerCase()}`;
-  return list.slice(0, -1).map((value) => value.toLowerCase()).join(", ") + `, and ${list[list.length - 1].toLowerCase()}`;
+  return list.slice(0, -1).map((v) => v.toLowerCase()).join(", ") + `, and ${list[list.length - 1].toLowerCase()}`;
 };
 
-// ---------- Top 2 Opportunities ----------
-export const getTopOpportunities = (assessment) => {
-  const candidateAreas = assessment.selectedAreas && assessment.selectedAreas.length
-    ? LIFE_AREAS.filter((area) => assessment.selectedAreas.includes(area.key))
-    : LIFE_AREAS;
-  const sorted = [...candidateAreas].sort((a, b) => assessment.ratings[a.key] - assessment.ratings[b.key]);
-  return sorted.slice(0, 2).map((area, index) => {
-    const friction = frictionsFor(assessment, area.key)[0] || getPrimaryObstacle(assessment) || "inconsistent routine";
-    const goalText = (assessment.goal || "make meaningful progress").trim();
-    const reason = index === 0
-      ? `${area.label} is at ${assessment.ratings[area.key]}/10 and is your clearest lever right now. Your goal to ${goalText.toLowerCase()} runs into ${friction.toLowerCase()} — a small, scheduled move here compounds fastest.`
-      : `${area.label} is at ${assessment.ratings[area.key]}/10 and is a strong second focus once your first move is holding. Same friction pattern — ${friction.toLowerCase()} — so a shared cue can serve both.`;
-    return { area, rank: index + 1, score: assessment.ratings[area.key], reason };
+const frictionsFor = (assessment, key) => (assessment[key] && assessment[key].frictions) || [];
+
+// ---------- MY CURRENT STATE ----------
+export const buildCurrentState = (assessment) => {
+  const strongest = getStrongestArea(assessment.ratings);
+  const urgent = getMostUrgentArea(assessment.ratings);
+  const goal = (assessment.goal || "").trim();
+  const mainFriction = frictionsFor(assessment, urgent.key)[0] || getPrimaryObstacle(assessment) || "an unclear routine";
+  const strengthScore = assessment.ratings[strongest.key];
+  const urgentScore = assessment.ratings[urgent.key];
+
+  const goalClause = goal
+    ? ` Your stated goal is to ${goal.toLowerCase().replace(/\.$/, "")}.`
+    : " You have not stated a headline goal yet — naming one sharpens everything below.";
+
+  return {
+    strongest,
+    urgent,
+    summary: `Your strongest area is ${strongest.label} at ${strengthScore}/10 (lower is stronger), while ${urgent.label} is currently your biggest gap at ${urgentScore}/10.${goalClause} The friction most likely slowing you down is ${mainFriction.toLowerCase()}.`,
+  };
+};
+
+// ---------- PRIORITY ENGINE ----------
+const GOAL_KEYWORDS = {
+  health: ["health", "weight", "sleep", "energy", "fit", "run", "gym", "diet", "stress"],
+  career: ["career", "promot", "job", "role", "salary", "raise", "switch", "manager"],
+  money: ["money", "save", "saving", "finance", "invest", "debt", "sip", "retire", "emergency", "insurance", "tax"],
+  productivity: ["productiv", "focus", "procrast", "priorit", "meeting", "task", "deadline"],
+  learning: ["learn", "skill", "course", "study", "certif", "power bi", "sql", "python", "language"],
+  relationships: ["relationship", "family", "partner", "spouse", "friend", "communicat", "team", "conflict"],
+};
+
+const goalMentionsArea = (goalText, areaKey) => {
+  const g = (goalText || "").toLowerCase();
+  return (GOAL_KEYWORDS[areaKey] || []).some((keyword) => g.includes(keyword));
+};
+
+const consistencyPenalty = (consistency) => {
+  if (consistency === "Rarely") return 1.0;
+  if (consistency === "Sometimes") return 0.5;
+  return 0;
+};
+
+export const buildPriorityScores = (assessment) => {
+  const goal = assessment.goal || "";
+  const consistency = assessment.consistency || "";
+  return LIFE_AREAS.map((area) => {
+    const rating = Number(assessment.ratings[area.key]);
+    const frictions = frictionsFor(assessment, area.key);
+    const goalBoost = goalMentionsArea(goal, area.key) ? 1.5 : 0;
+    const frictionBoost = Math.min(frictionsFor(assessment, area.key).length, 3) * 0.3;
+    const consistencyBoost = consistencyPenalty(consistency);
+    const urgency = rating + goalBoost + frictionBoost + consistencyBoost;
+    return { area, rating, frictions, goalBoost, urgency };
+  }).sort((a, b) => b.urgency - a.urgency);
+};
+
+const TIERS = ["URGENT", "IMPORTANT", "OPPORTUNITY"];
+
+const buildProblemLine = (entry, assessment) => {
+  const friction = entry.frictions[0] || getPrimaryObstacle(assessment) || "an inconsistent routine";
+  const goalMention = entry.goalBoost > 0 ? " and it lines up with your stated goal" : "";
+  return `${entry.area.label} is at ${entry.rating}/10 with ${friction.toLowerCase()}${goalMention}.`;
+};
+
+const areaGoalText = (assessment, areaKey) => {
+  const area = assessment[areaKey] || {};
+  if (areaKey === "career" && area.targetRole) return `Move toward ${area.targetRole}`;
+  if (areaKey === "career" && area.goal) return area.goal;
+  if (areaKey === "learning" && area.goal) return area.goal;
+  if (areaKey === "learning" && area.targetSkill) return `Build ${area.targetSkill}`;
+  if (areaKey === "money" && Array.isArray(area.moneyGoals) && area.moneyGoals.length) return area.moneyGoals.join(", ");
+  if (areaKey === "relationships" && area.focus) return area.focus;
+  return assessment.goal || "Improve this area";
+};
+
+export const getTopThreePriorities = (assessment, actions = {}) => {
+  const ranked = buildPriorityScores(assessment).slice(0, 3);
+  return ranked.map((entry, index) => {
+    const behaviour = getBehaviour(entry.area.key, assessment);
+    const source = getPrimarySource(entry.area.key);
+    const priorityKey = `priority-${entry.area.key}`;
+    const state = actions[priorityKey] || { status: "pending" };
+    return {
+      key: priorityKey,
+      tier: TIERS[index] || "OPPORTUNITY",
+      area: entry.area,
+      currentScore: entry.rating,
+      goal: areaGoalText(assessment, entry.area.key),
+      problem: buildProblemLine(entry, assessment),
+      recommendation: behaviour,
+      benefit: behaviour.benefit,
+      consequence: behaviour.consequence,
+      source,
+      disclaimer: DISCLAIMER[entry.area.key],
+      status: state.status,
+      completedAt: state.completedAt || null,
+    };
   });
 };
 
-// ---------- Cross-domain Life Twin synthesis ----------
+// ---------- LIFE TWIN (coach synthesis, 3 rich paragraphs) ----------
 export const buildTwinInsights = (assessment) => {
-  const strongest = getStrongestArea(assessment.ratings);
-  const lowest = getLowestArea(assessment.ratings);
-  const [op1, op2] = getTopOpportunities(assessment);
-  const consistent = assessment.consistency === "Very consistent" || assessment.consistency === "Usually";
-  const goalText = (assessment.goal || "improve").trim();
+  const state = buildCurrentState(assessment);
+  const priorities = getTopThreePriorities(assessment);
+  const top = priorities[0];
+  if (!top) return [];
+  const consistency = (assessment.consistency || "Inconsistent").toLowerCase();
+  const summary = getObstacleSummary(assessment) || "current friction";
 
   return [
-    `${strongest.label} (${assessment.ratings[strongest.key]}/10) is currently your strongest area — a useful anchor to attach a small ${lowest.label.toLowerCase()} action to.`,
-    op2
-      ? `${op1.area.label} and ${op2.area.label} are your two clearest levers for the goal to ${goalText.toLowerCase()} — a single scheduled cue can serve both.`
-      : `${op1.area.label} is your single clearest lever for the goal to ${goalText.toLowerCase()}.`,
-    consistent
-      ? `Your ${assessment.consistency.toLowerCase()} rhythm is an asset — pair one fixed daily cue with a 20-minute action so ${op1.area.label.toLowerCase()} becomes automatic.`
-      : `${assessment.consistency || "Inconsistent"} rhythm is your main constraint — shrink the first action until ${getObstacleSummary(assessment) || "friction"} can no longer stop it.`,
+    `What is happening — ${state.summary} The rating pattern suggests ${top.area.label.toLowerCase()} is what most needs a decision this week.`,
+    `Why it matters — ${top.area.label} at ${top.currentScore}/10 collides with ${summary}. Under a ${consistency} rhythm, without a specific behaviour to break the cycle, this area is unlikely to move on its own.`,
+    `What to do vs. what happens if you don't — ${top.recommendation.what.toLowerCase()} on ${top.recommendation.when.toLowerCase()}. If you do this consistently, ${top.benefit.toLowerCase()} If you don't, ${top.consequence.toLowerCase()}`,
   ];
 };
 
-// ---------- Next Best Action (What / When / How long / Why) ----------
-const NEXT_ACTION_TEMPLATES = {
-  health: (a) => ({
-    what: "Take a brisk 20-minute walk outdoors",
-    when: "After lunch today",
-    how: "20 minutes at a comfortable, conversational pace",
-    why: `A gentle, low-friction move that improves ${a.health?.energy ? a.health.energy.toLowerCase() : "energy"} and stress before compounding into a routine.`,
-  }),
-  career: (a) => ({
-    what: `List three skills required for ${a.career?.targetRole || "your next role"} and mark the one clearest gap`,
-    when: "At 6:00pm today",
-    how: "20 minutes, on paper or a single doc — no research rabbit holes",
-    why: `Names a concrete direction before applications, which reduces ${(frictionsFor(a, "career")[0] || "career uncertainty").toLowerCase()}.`,
-  }),
-  money: (a) => ({
-    what: "Review one week of discretionary spending and circle the biggest recurring leak",
-    when: "Before dinner today",
-    how: "20 minutes with your bank or UPI history — no new tools",
-    why: `Turns a vague money worry into one small, visible edit — the fastest path to ${(a.money?.goals || "financial breathing room").toLowerCase()}.`,
-  }),
-  productivity: (a) => ({
-    what: "Complete one 20-minute focus block on your most postponed priority",
-    when: "Before opening any non-essential app or meeting",
-    how: "20 minutes, phone in another room, one browser tab",
-    why: `Directly counters ${(frictionsFor(a, "productivity")[0] || "distractions").toLowerCase()} while proving to yourself that starting is possible.`,
-  }),
-  learning: (a) => ({
-    what: `Spend 20 minutes on one project-based lesson toward ${a.learning?.targetSkill || "your target skill"}`,
-    when: "Tonight",
-    how: "20 minutes, one free resource — no course collecting",
-    why: `Small, project-based reps beat course collecting, especially when time is limited to ${a.learning?.time || "a modest weekly budget"}.`,
-  }),
-  relationships: (a) => ({
-    what: "Send one thoughtful message that opens a calm conversation",
-    when: "Tonight before bed",
-    how: "Three to five sentences — no problem-solving in the message",
-    why: `Small, specific messages rebuild rhythm with your ${(a.relationships?.area || "person").toLowerCase()} without pressure to resolve everything at once.`,
-  }),
+// ---------- NEXT BEST ACTION ----------
+export const buildNextAction = (assessment, actions = {}) => {
+  const [top] = getTopThreePriorities(assessment, actions);
+  if (!top) return null;
+  return {
+    key: "nba",
+    what: top.recommendation.what,
+    when: top.recommendation.when,
+    howOften: top.recommendation.howOften,
+    why: `${top.area.label} is at ${top.currentScore}/10 and ranks as your most urgent lever right now — ${top.problem.toLowerCase()}`,
+    ifYouDo: top.benefit,
+    ifYouDont: top.consequence,
+    timeRequired: "About 30 minutes today, then a repeat cadence",
+    area: top.area,
+    priorityKey: top.key,
+    status: (actions.nba && actions.nba.status) || "pending",
+    completedAt: (actions.nba && actions.nba.completedAt) || null,
+  };
 };
 
-export const buildNextAction = (assessment) => {
-  const [top] = getTopOpportunities(assessment);
-  const template = NEXT_ACTION_TEMPLATES[top.area.key](assessment);
-  return { ...template, area: top.area };
+// ---------- FUTURE SELF · HORIZONS ----------
+const projectAt = (currentScore, deltaPer10Days, days) => clamp(Math.round(currentScore + (deltaPer10Days * days) / 10), 0, 100);
+
+export const buildFutureHorizons = (score, assessment, actions = {}) => {
+  const top = buildNextAction(assessment, actions);
+  const areaKey = top ? top.area.key : "productivity";
+  const areaLabel = top ? top.area.label : "your top priority";
+  const acted = top && top.status === "completed";
+
+  const perAreaHorizon = {
+    health: {
+      days10: "If activity remains consistent for 10 days and food intake supports a mild calorie deficit, a small gradual improvement in weight or energy may be possible (approximately 0.5 kg for some people; results vary substantially).",
+      days30: "If activity remains consistent for 30 days, walking pace and daily energy may steady, and sleep quality may improve modestly.",
+      year1: "If the routine holds for a year, movement volume compounds and baseline fitness may improve meaningfully — the exact change depends on nutrition, sleep, and health history.",
+      years10: "Over a decade, consistent daily movement is associated with a lower risk of several chronic conditions — not a guarantee, but a strong direction.",
+    },
+    career: {
+      days10: `If ${areaLabel.toLowerCase()} skill practice starts within 10 days, you should have one clear skill map and a first evidence project underway.`,
+      days30: "If practice continues for 30 days, one demonstrable project can be attached to your résumé — increasing readiness for roles that require it.",
+      year1: "If practice compounds for a year, portfolio depth may unlock interviews for roles at the next level — outcomes depend on market and role fit.",
+      years10: "Over a decade, deliberate compounding on a small number of durable skills tends to widen career optionality — not a promise of a specific role.",
+    },
+    money: {
+      days10: "If the review runs within 10 days, one recurring leak can be reduced and a first savings target named.",
+      days30: "If the habit runs 30 days, savings discipline may increase and one emergency-fund milestone may be reachable — actual amounts depend on income and essentials.",
+      year1: "For example, if ₹5,000 per month is set aside for one year, contributions alone would total ₹60,000 before considering any returns. Actual investment value depends on the vehicle and market conditions.",
+      years10: "Over ten years, disciplined contributions and diversified allocation may accumulate significantly — real outcomes depend on returns and are not guaranteed.",
+    },
+    productivity: {
+      days10: "If the daily focus block runs on 5 weekdays across 10 days, the number of overdue priorities is likely to visibly drop.",
+      days30: "If the block runs across 30 days, deadline pressure and rework may reduce, and one recurring meeting may be cuttable.",
+      year1: "If the habit holds a year, a compounding effect on annual output is likely — the exact change depends on the work being protected.",
+      years10: "Over a decade, protected deep-work time is a strong lever for expert-level output — not automatic, but well-observed.",
+    },
+    learning: {
+      days10: "If 3 project-based sessions run in 10 days, one small artefact exists — enough to demonstrate initial capability.",
+      days30: "If sessions continue 30 days, one complete project can be shipped and shared, which improves readiness for related roles.",
+      year1: "If the routine holds a year, you may develop portfolio-grade depth in the target skill — job outcomes still depend on market fit.",
+      years10: "Over a decade, deep skill compounding is one of the more reliable career levers, though outcomes depend on how the skill is applied.",
+    },
+    relationships: {
+      days10: "If the message is sent and the conversation happens in 10 days, coordination or closeness may steady.",
+      days30: "If honest conversations continue for 30 days, unresolved friction may reduce and trust may compound.",
+      year1: "Over a year, sustained repair practices tend to widen the range of what the relationship can absorb — not a guarantee, but a strong signal.",
+      years10: "Over a decade, small repeated repair actions accumulate — outcomes depend on both people's engagement.",
+    },
+  };
+
+  const per = perAreaHorizon[areaKey];
+  const currentPace = acted ? 3 : 0;
+  const trendNote = acted ? "You have completed the recommended action — the projection reflects momentum from that decision." : "You have not yet completed the recommended action — this projection assumes you begin today.";
+
+  return {
+    today: {
+      label: "Today",
+      note: top ? `Complete: ${top.what}.` : "Take the assessment first.",
+    },
+    days10: {
+      label: "10 days",
+      projected: projectAt(score, currentPace + 3, 10),
+      note: per.days10,
+    },
+    days30: {
+      label: "30 days",
+      projected: projectAt(score, currentPace + 3, 30),
+      note: per.days30,
+    },
+    year1: {
+      label: "1 year",
+      projected: clamp(score + currentPace + 12, 0, 100),
+      note: per.year1,
+    },
+    years10: {
+      label: "10 years",
+      projected: clamp(score + currentPace + 20, 0, 100),
+      note: per.years10,
+    },
+    trendNote,
+  };
 };
 
-// ---------- Future Self · 30 days · 3 scenarios ----------
-export const buildFutureScenarios = (score, assessment) => {
-  const [top] = getTopOpportunities(assessment);
-  const clamp = (value) => Math.max(0, Math.min(100, Math.round(value)));
+// ---------- FUTURE SELF · 3 TRAJECTORIES ----------
+export const buildFutureScenarios = (score, assessment, actions = {}) => {
+  const [top] = getTopThreePriorities(assessment, actions);
+  const areaLabel = top ? top.area.label : "your top area";
+  const acted = top && top.status === "completed";
+  const upgradeGain = acted ? 14 : 10;
   return [
     {
       key: "current",
-      label: "Current pace",
-      projected: clamp(score + 3),
+      label: "Current trajectory",
+      projected: clamp(score + 3, 0, 100),
       delta: "+3",
-      note: `Sticking with today's rhythm, ${top.area.label} inches upward. Progress is real but slow — a good baseline to compare against.`,
+      note: `If today's rhythm continues, ${areaLabel.toLowerCase()} moves slowly. Progress is real but modest — a useful baseline.`,
     },
     {
-      key: "improved",
-      label: "Improved consistency",
-      projected: clamp(score + 10),
-      delta: "+10",
-      note: `Ten to twelve small, scheduled ${top.area.label.toLowerCase()} actions across 30 days compound noticeably — most of the gain sits here.`,
+      key: "upgrade",
+      label: "Upgrade trajectory",
+      projected: clamp(score + upgradeGain, 0, 100),
+      delta: `+${upgradeGain}`,
+      note: `If the recommended ${areaLabel.toLowerCase()} behaviour is performed consistently, most of the 30-day gain sits here — assuming actions are actually taken.`,
     },
     {
-      key: "low",
-      label: "Low consistency",
-      projected: clamp(score - 4),
-      delta: "-4",
-      note: `Skipped actions and unmanaged ${getObstacleSummary(assessment) || "friction"} slowly erode your baseline — the risk case, not a prediction.`,
+      key: "neglect",
+      label: "Neglect trajectory",
+      projected: clamp(score - 5, 0, 100),
+      delta: "-5",
+      note: `If important actions are repeatedly ignored, ${(getObstacleSummary(assessment) || "current friction").toLowerCase()} may compound and baseline may erode. Risk case, not a prediction.`,
     },
   ];
 };
 
-// ---------- Life Risk Radar ----------
-const levelFromScore = (score) => (score <= 3 ? "HIGH" : score <= 6 ? "MEDIUM" : "LOW");
+// ---------- LIFE RISK RADAR ----------
+const levelFromScore = (rating) => (rating >= 9 ? "HIGH" : rating >= 7 ? "MEDIUM" : rating >= 5 ? "MEDIUM" : "LOW");
 
-export const buildRiskRadar = (assessment) => {
+// If the action associated with an area has been completed, downgrade risk one step and mark as "Improving".
+const improvedLevel = (level) => (level === "HIGH" ? "MEDIUM" : level === "MEDIUM" ? "LOW" : "LOW");
+
+const areaCompleted = (actions, areaKey) => {
+  const entry = actions[`priority-${areaKey}`];
+  return entry && entry.status === "completed";
+};
+
+export const buildRiskRadar = (assessment, actions = {}) => {
   const r = assessment.ratings;
   const health = assessment.health || {};
   const career = assessment.career || {};
@@ -156,76 +343,32 @@ export const buildRiskRadar = (assessment) => {
   const goalRisk = assessment.consistency === "Rarely" ? "HIGH" : assessment.consistency === "Sometimes" ? "MEDIUM" : "LOW";
   const stressLoad = health.stress === "High" ? 8 : health.stress === "Moderate" ? 5 : 2;
   const sleepStrain = health.sleep === "Poor" || health.sleep === "Fair";
-  const burnoutLevel = (stressLoad >= 7 && sleepStrain) || (r.productivity <= 3 && stressLoad >= 5)
-    ? "HIGH"
-    : stressLoad >= 5 || sleepStrain
-      ? "MEDIUM"
-      : "LOW";
-
+  const burnoutLevel = (stressLoad >= 7 && sleepStrain) || (r.productivity >= 7 && stressLoad >= 5) ? "HIGH" : stressLoad >= 5 || sleepStrain ? "MEDIUM" : "LOW";
   const goalPreview = assessment.goal ? assessment.goal.trim().slice(0, 60) + (assessment.goal.length > 60 ? "…" : "") : "unspecified";
 
-  return [
-    {
-      key: "goal",
-      label: "Goal follow-through risk",
-      level: goalRisk,
-      why: `${assessment.consistency || "Unclear"} consistency + goal "${goalPreview}" makes big-jump commitments fragile.`,
-      response: "Shrink the goal to the next 20-minute scheduled action.",
-    },
-    {
-      key: "burnout",
-      label: "Stress / burnout signal",
-      level: burnoutLevel,
-      why: `${health.stress || "Unrated"} stress meets ${health.sleep || "unrated"} sleep and ${health.energy || "unrated"} energy — a load pattern worth watching.`,
-      response: "Choose one recovery action (walk, sleep window, screen-off block); consult a qualified professional if concerns persist.",
-    },
-    {
-      key: "wellness",
-      label: "Health signal",
-      level: levelFromScore(r.health),
-      why: `${r.health}/10 health rating with ${health.exercise || "unrated"} exercise cadence.`,
-      response: "Anchor one movement action to an existing daily habit (after lunch, before shower).",
-    },
-    {
-      key: "career",
-      label: "Career direction risk",
-      level: r.career <= 3 || (career.goal === "Career switch" && !career.targetRole) ? "HIGH" : r.career <= 6 ? "MEDIUM" : "LOW",
-      why: `${r.career}/10 career score${career.targetRole ? ` and target role "${career.targetRole}"` : " with no target role named yet"}.`,
-      response: "Name one target role and one skill gap before applying anywhere.",
-    },
-    {
-      key: "money",
-      label: "Financial resilience signal",
-      level: r.money <= 3 || money.emergency === "None" || money.debt === "Yes" ? "HIGH" : r.money <= 6 ? "MEDIUM" : "LOW",
-      why: `${r.money}/10 money score with a ${money.emergency || "unrated"} emergency fund and ${money.debt || "unrated"} high-interest debt.`,
-      response: "Write a small emergency-fund milestone; verify major decisions with a qualified financial professional.",
-    },
-    {
-      key: "learning",
-      label: "Skill gap signal",
-      level: levelFromScore(r.learning),
-      why: `${r.learning}/10 learning score with ${learning.time || "unrated"} weekly time reserved for ${learning.targetSkill || "the target skill"}.`,
-      response: "Reserve the time you selected for one free, project-based resource.",
-    },
-    {
-      key: "productivity",
-      label: "Focus and follow-through signal",
-      level: r.productivity <= 3 || productivity.postponing === "Very often" ? "HIGH" : r.productivity <= 6 ? "MEDIUM" : "LOW",
-      why: `${r.productivity}/10 productivity score with ${productivity.postponing || "unrated"} postponement and ${productivity.unfinished || "unrated"} unfinished priorities.`,
-      response: "Protect one 20-minute block before non-essential apps or meetings.",
-    },
+  const raw = [
+    { key: "goal", areaKey: null, label: "Goal follow-through risk", level: goalRisk, why: `${assessment.consistency || "Unclear"} consistency + goal "${goalPreview}" makes big-jump commitments fragile.`, response: "Shrink the goal to the next 30-minute scheduled action." },
+    { key: "burnout", areaKey: "health", label: "Stress signal", level: burnoutLevel, why: `${health.stress || "Unrated"} stress meets ${health.sleep || "unrated"} sleep and ${health.energy || "unrated"} energy — a load pattern worth watching.`, response: "Choose one recovery action (walk, sleep window, screen-off block). Consult a qualified professional if concerns persist." },
+    { key: "wellness", areaKey: "health", label: "Health / wellness risk", level: levelFromScore(r.health), why: `${r.health}/10 health rating with ${health.exercise || "unrated"} exercise cadence.`, response: "Anchor one movement action to an existing daily habit (after lunch, before shower)." },
+    { key: "career", areaKey: "career", label: "Career direction risk", level: r.career >= 9 || (career.goal === "Career switch" && !career.targetRole) ? "HIGH" : r.career >= 7 ? "MEDIUM" : "LOW", why: `${r.career}/10 career score${career.targetRole ? ` and target role "${career.targetRole}"` : " with no target role named yet"}.`, response: "Name one target role and one skill gap before applying anywhere." },
+    { key: "money", areaKey: "money", label: "Financial discipline risk", level: r.money >= 9 || money.emergency === "None" || money.debt === "Yes" ? "HIGH" : r.money >= 7 ? "MEDIUM" : "LOW", why: `${r.money}/10 money score with a ${money.emergency || "unrated"} emergency fund and ${money.debt || "unrated"} high-interest debt.`, response: "Write a small emergency-fund milestone; verify decisions with a qualified financial professional." },
+    { key: "learning", areaKey: "learning", label: "Skill gap risk", level: levelFromScore(r.learning), why: `${r.learning}/10 learning score with ${learning.time || "unrated"} weekly time reserved for ${learning.targetSkill || "the target skill"}.`, response: "Reserve the selected time for one free, project-based resource." },
+    { key: "productivity", areaKey: "productivity", label: "Focus and follow-through risk", level: r.productivity >= 9 || productivity.postponing === "Very often" ? "HIGH" : r.productivity >= 7 ? "MEDIUM" : "LOW", why: `${r.productivity}/10 productivity score with ${productivity.postponing || "unrated"} postponement.`, response: "Protect one 30-minute block before non-essential apps or meetings." },
   ];
+
+  return raw.map((risk) => {
+    if (risk.areaKey && areaCompleted(actions, risk.areaKey)) {
+      return { ...risk, level: improvedLevel(risk.level), improving: true, response: `${risk.response} — improving now that a specific action has been logged.` };
+    }
+    return { ...risk, improving: false };
+  });
 };
 
 // ---------- Per-dimension helper for expandable card ----------
 export const getDimensionSummary = (assessment, key) => {
   const score = assessment.ratings[key];
   const frictions = frictionsFor(assessment, key);
-  const risks = buildRiskRadar(assessment);
-  const dimensionRisk = risks.find((risk) => {
-    if (key === "health") return risk.key === "wellness";
-    if (key === "productivity") return risk.key === "productivity";
-    return risk.key === key;
-  }) || risks[0];
-  return { score, frictions, dimensionRisk };
+  const risks = buildRiskRadar(assessment, {});
+  const dimensionRisk = risks.find((risk) => risk.areaKey === key) || risks[0];
+  return { score, frictions, dimensionRisk, sources: getSources(key), behaviour: getBehaviour(key, assessment), disclaimer: DISCLAIMER[key] };
 };
