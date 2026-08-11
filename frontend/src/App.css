@@ -285,6 +285,51 @@ fieldset { border: 0; padding: 0; margin: 0 0 22px; }
 .radio-option span { width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 50%; }
 .radio-option.selected span { border: 5px solid var(--red); }
 
+.radio-option.multi-option .multi-mark {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--red);
+  background: var(--surface);
+}
+.radio-option.multi-option.selected .multi-mark {
+  border: 1px solid var(--red);
+  background: #fff8f0;
+}
+.legend-hint {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-left: 10px;
+}
+.obstacle-error {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--red);
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+.obstacle-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.obstacle-list li {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11px;
+}
+
 .consistency-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .consistency-option {
   min-height: 150px;

@@ -7,7 +7,7 @@ export const LIFE_AREAS = [
   { key: "relationships", label: "Relationships", icon: "♡" },
 ];
 
-export const OBSTACLES = ["Procrastination", "Stress", "Lack of time", "Lack of motivation", "Career uncertainty", "Financial pressure", "Poor habits"];
+export const OBSTACLES = ["Procrastination", "Stress", "Lack of time", "Lack of motivation", "Career uncertainty", "Financial pressure", "Poor habits", "Lack of direction"];
 export const CONSISTENCY = ["Rarely", "Sometimes", "Usually", "Very consistent"];
 
 export const FRICTIONS = {
@@ -32,7 +32,7 @@ export const blankAssessment = {
   goal: "",
   selectedAreas: LIFE_AREAS.map((area) => area.key),
   ratings: { health: 5, career: 5, money: 5, productivity: 5, learning: 5, relationships: 5 },
-  obstacle: "",
+  obstacles: [],
   consistency: "",
   ...fieldDefaults,
 };

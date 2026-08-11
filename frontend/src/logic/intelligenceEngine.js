@@ -15,6 +15,23 @@ export const getInsight = (score) =>
 
 const frictionsFor = (assessment, key) => (assessment[key] && assessment[key].frictions) || [];
 
+// Read the multi-select obstacles array (with legacy string fallback for safety).
+const getObstacleList = (assessment) => {
+  if (Array.isArray(assessment.obstacles)) return assessment.obstacles;
+  if (typeof assessment.obstacle === "string" && assessment.obstacle.trim()) return [assessment.obstacle];
+  return [];
+};
+
+export const getPrimaryObstacle = (assessment) => getObstacleList(assessment)[0] || "";
+
+export const getObstacleSummary = (assessment) => {
+  const list = getObstacleList(assessment);
+  if (list.length === 0) return "";
+  if (list.length === 1) return list[0].toLowerCase();
+  if (list.length === 2) return `${list[0].toLowerCase()} and ${list[1].toLowerCase()}`;
+  return list.slice(0, -1).map((value) => value.toLowerCase()).join(", ") + `, and ${list[list.length - 1].toLowerCase()}`;
+};
+
 // ---------- Top 2 Opportunities ----------
 export const getTopOpportunities = (assessment) => {
   const candidateAreas = assessment.selectedAreas && assessment.selectedAreas.length
@@ -22,7 +39,7 @@ export const getTopOpportunities = (assessment) => {
     : LIFE_AREAS;
   const sorted = [...candidateAreas].sort((a, b) => assessment.ratings[a.key] - assessment.ratings[b.key]);
   return sorted.slice(0, 2).map((area, index) => {
-    const friction = frictionsFor(assessment, area.key)[0] || assessment.obstacle || "inconsistent routine";
+    const friction = frictionsFor(assessment, area.key)[0] || getPrimaryObstacle(assessment) || "inconsistent routine";
     const goalText = (assessment.goal || "make meaningful progress").trim();
     const reason = index === 0
       ? `${area.label} is at ${assessment.ratings[area.key]}/10 and is your clearest lever right now. Your goal to ${goalText.toLowerCase()} runs into ${friction.toLowerCase()} — a small, scheduled move here compounds fastest.`
@@ -46,7 +63,7 @@ export const buildTwinInsights = (assessment) => {
       : `${op1.area.label} is your single clearest lever for the goal to ${goalText.toLowerCase()}.`,
     consistent
       ? `Your ${assessment.consistency.toLowerCase()} rhythm is an asset — pair one fixed daily cue with a 20-minute action so ${op1.area.label.toLowerCase()} becomes automatic.`
-      : `${assessment.consistency || "Inconsistent"} rhythm is your main constraint — shrink the first action until ${(assessment.obstacle || "friction").toLowerCase()} can no longer stop it.`,
+      : `${assessment.consistency || "Inconsistent"} rhythm is your main constraint — shrink the first action until ${getObstacleSummary(assessment) || "friction"} can no longer stop it.`,
   ];
 };
 
@@ -120,7 +137,7 @@ export const buildFutureScenarios = (score, assessment) => {
       label: "Low consistency",
       projected: clamp(score - 4),
       delta: "-4",
-      note: `Skipped actions and unmanaged ${(assessment.obstacle || "friction").toLowerCase()} slowly erode your baseline — the risk case, not a prediction.`,
+      note: `Skipped actions and unmanaged ${getObstacleSummary(assessment) || "friction"} slowly erode your baseline — the risk case, not a prediction.`,
     },
   ];
 };

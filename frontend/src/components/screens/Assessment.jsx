@@ -119,7 +119,7 @@ export default function Assessment({ assessment, setAssessment, onComplete, onBa
     if (current.key === "goal") return (assessment.goal || "").trim().length > 0;
     if (current.key === "areas") return (assessment.selectedAreas || []).length > 0;
     if (current.key === "ratings") return true;
-    if (current.key === "obstacle") return !!assessment.obstacle;
+    if (current.key === "obstacle") return (assessment.obstacles || []).length > 0;
     if (current.key === "consistency") return !!assessment.consistency;
     if (current.area) return isDeepDiveComplete(assessment, current.area);
     return true;
@@ -229,25 +229,43 @@ export default function Assessment({ assessment, setAssessment, onComplete, onBa
 
         {current.key === "obstacle" && (
           <fieldset>
-            <legend>What is your biggest obstacle?</legend>
+            <legend>
+              What is your biggest obstacle? <span className="legend-hint">Select all that apply.</span>
+            </legend>
             <div className="choice-list">
-              {OBSTACLES.map((item) => (
-                <label
-                  key={item}
-                  className={`radio-option ${assessment.obstacle === item ? "selected" : ""}`}
-                  data-testid={`obstacle-option-${testId(item)}`}
-                >
-                  <input
-                    type="radio"
-                    name="obstacle"
-                    checked={assessment.obstacle === item}
-                    onChange={() => update("obstacle", item)}
-                  />
-                  {item}
-                  <span />
-                </label>
-              ))}
+              {OBSTACLES.map((item) => {
+                const active = (assessment.obstacles || []).includes(item);
+                return (
+                  <label
+                    key={item}
+                    className={`radio-option multi-option ${active ? "selected" : ""}`}
+                    data-testid={`obstacle-option-${testId(item)}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={active}
+                      onChange={() =>
+                        update(
+                          "obstacles",
+                          active
+                            ? (assessment.obstacles || []).filter((value) => value !== item)
+                            : [...(assessment.obstacles || []), item]
+                        )
+                      }
+                    />
+                    {item}
+                    <span className="multi-mark" aria-hidden="true">
+                      {active ? <Check size={14} /> : null}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
+            {(assessment.obstacles || []).length === 0 && (
+              <p className="obstacle-error" data-testid="obstacle-error-message">
+                Please select at least one friction point.
+              </p>
+            )}
           </fieldset>
         )}
 

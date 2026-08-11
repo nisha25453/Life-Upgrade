@@ -148,13 +148,22 @@ function TopOpportunities({ opportunities }) {
   );
 }
 
-function ObstaclePanel({ obstacle }) {
+function ObstaclePanel({ obstacles }) {
+  const list = Array.isArray(obstacles) ? obstacles : [];
+  const heading = list.length === 0 ? "unnamed." : list.length === 1 ? list[0] : `${list.slice(0, -1).join(", ")} & ${list[list.length - 1]}`;
   return (
     <article className="obstacle-panel panel" data-testid="biggest-obstacle-card">
-      <div className="panel-label"><span>03</span><b>Biggest obstacle</b></div>
+      <div className="panel-label"><span>03</span><b>Biggest obstacles</b></div>
       <Compass size={26} />
-      <p>Your biggest obstacle is</p>
-      <h2 data-testid="biggest-obstacle-value">{obstacle || "unnamed."}</h2>
+      <p>{list.length > 1 ? "Your current friction points are" : "Your biggest obstacle is"}</p>
+      <h2 data-testid="biggest-obstacle-value">{heading}</h2>
+      {list.length > 0 && (
+        <ul className="obstacle-list" data-testid="biggest-obstacle-list">
+          {list.map((item) => (
+            <li key={item} data-testid={`biggest-obstacle-item-${item.toLowerCase().replace(/\s+/g, "-")}`}>{item}</li>
+          ))}
+        </ul>
+      )}
       <span className="obstacle-note">Naming the friction reduces it. Every next action here works around this.</span>
     </article>
   );
@@ -326,7 +335,7 @@ export default function Dashboard({ data, onReset, setData }) {
         </article>
 
         <TopOpportunities opportunities={opportunities} />
-        <ObstaclePanel obstacle={assessment.obstacle} />
+        <ObstaclePanel obstacles={assessment.obstacles} />
         <TwinPanel insights={twinInsights} />
         <NextActionPanel action={nextAction} completed={completed} onMarkComplete={markComplete} />
         <ProgressPanel completed={completed} />
