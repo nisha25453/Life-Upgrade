@@ -1,12 +1,13 @@
 // Curated behaviour library + verified sources per dimension.
 // SCORING NOTE (v2): dimension ratings are 1 = strongest, 10 = needs most attention.
-// All sources are hardcoded, dated, and public. No live fetches.
+// v3 (2026-02-11): behaviours are now target-role / target-skill / goal aware so recommendations
+// are specific to the user rather than generic. Still deterministic; still no live fetches.
 
 const CHECKED = "2026-02-15";
 
 const src = (title, url, type, cost, why) => ({ title, url, type, cost, why, checked: CHECKED });
 
-// ---------- Verified sources by area ----------
+// ---------- Verified sources by area (unchanged) ----------
 export const SOURCES = {
   health: [
     src("WHO · Physical activity guidelines", "https://www.who.int/news-room/fact-sheets/detail/physical-activity", "Official / authoritative source", "Free", "Global public-health guidance on realistic weekly movement targets."),
@@ -16,7 +17,7 @@ export const SOURCES = {
   ],
   career: [
     src("U.S. Bureau of Labor Statistics · Occupational Outlook Handbook", "https://www.bls.gov/ooh/", "Official labour-market source", "Free", "Authoritative role-by-role skill and outlook data."),
-    src("Microsoft Learn · Power BI learning path", "https://learn.microsoft.com/en-us/training/powerplatform/power-bi", "Official product-training source", "Free", "Free, vendor-neutral modules for analytics upskilling — often referenced in analytics roles."),
+    src("Microsoft Learn · Role-based learning paths", "https://learn.microsoft.com/en-us/training/browse/", "Official product-training source", "Free", "Free, role-aligned modules including Power BI, Azure, product and data tracks."),
     src("Coursera · Career Academy (free-to-audit tracks)", "https://www.coursera.org/career-academy", "Recognized learning platform", "Free to audit / paid certificate", "Role-aligned learning paths with audit-only tracks."),
     src("Harvard Business Review · Managing yourself", "https://hbr.org/topic/subject/managing-yourself", "Recognized editorial source", "Limited free / paid", "Research-backed articles on positioning and interviewing."),
   ],
@@ -45,110 +46,199 @@ export const SOURCES = {
   ],
 };
 
-// ---------- Behaviour templates per area ----------
-// Each returns a structured recommendation with What/When/HowOften/Benefit/Consequence.
-// Templates read from the deep-dive answers so the copy references the user's own inputs.
+// ---------- Target-role heuristics for Career + Learning ----------
+export const inferSkillTrack = (targetOrSkill) => {
+  const t = (targetOrSkill || "").toLowerCase();
+  if (/product/.test(t)) return {
+    label: "IT Product Management",
+    course: "Coursera 'Digital Product Management' specialization (audit tier is free)",
+    source: SOURCES.career[2],
+  };
+  if (/data|analyt|\bbi\b|power bi|sql/.test(t)) return {
+    label: "Power BI / data analytics",
+    course: "Microsoft Learn 'Power BI Data Analyst' learning path (free)",
+    source: SOURCES.career[1],
+  };
+  if (/strateg|consult/.test(t)) return {
+    label: "business strategy fundamentals",
+    course: "Coursera 'Business Strategy' specialization (audit) + HBR 'Managing Yourself' articles",
+    source: SOURCES.career[3],
+  };
+  if (/engineer|develop|software|program|code/.test(t)) return {
+    label: "portfolio-grade coding project",
+    course: "MIT OCW 'Introduction to Computer Science' or freeCodeCamp responsive-web track",
+    source: SOURCES.learning[2],
+  };
+  if (/design|ux|ui/.test(t)) return {
+    label: "design portfolio project",
+    course: "Coursera 'Google UX Design Professional Certificate' (audit tier)",
+    source: SOURCES.career[2],
+  };
+  if (/manage|lead|director/.test(t)) return {
+    label: "people-leadership fundamentals",
+    course: "Microsoft Learn 'Manager Fundamentals' path + HBR 'Managing Yourself'",
+    source: SOURCES.career[1],
+  };
+  if (/market|growth|content/.test(t)) return {
+    label: "growth marketing fundamentals",
+    course: "Coursera 'Digital Marketing' specialization (audit tier)",
+    source: SOURCES.career[2],
+  };
+  return {
+    label: "one specific skill for your target role",
+    course: "Microsoft Learn's role-based learning paths",
+    source: SOURCES.career[1],
+  };
+};
+
+// ---------- Behaviour templates ----------
 
 const HEALTH_BEHAVIOURS = (a) => {
   const health = a.health || {};
-  if (health.sleep === "Poor" || health.sleep === "Fair") {
+  const sleepPoor = health.sleep === "Poor" || health.sleep === "Fair";
+  const highStress = health.stress === "High";
+  const lowExercise = health.exercise === "Rarely" || health.exercise === "1–2 days/week";
+
+  if (sleepPoor && highStress) {
     return {
-      what: "Set a fixed lights-off window tonight and put your phone outside the bedroom",
-      when: "Starting tonight, 30 minutes before your intended sleep time",
-      howOften: "Every night for the next 10 days",
-      benefit: "If sleep timing stabilises for 10 days, energy and stress may improve alongside a more consistent morning routine.",
-      consequence: "If your sleep window keeps shifting, fatigue and stress patterns are likely to continue interfering with the other goals you set.",
+      what: "Set a fixed lights-off window tonight and try one 10-minute breathing session (WHO / Ministry of AYUSH resources both have free guided sequences)",
+      when: "Every night for the next 10 nights, phone left outside the bedroom",
+      howOften: "10 consecutive nights, then reassess sleep quality",
+      benefit: "If sleep timing stabilises for 10 nights, stress and daytime energy usually recover before weight or fitness metrics move.",
+      consequence: "If sleep and stress stay this stacked, other goals (career, focus, weight management) are unlikely to move because recovery is under-resourced.",
     };
   }
-  if (health.exercise === "Rarely" || health.exercise === "1–2 days/week") {
+  if (lowExercise) {
     return {
-      what: "Take a 30-minute brisk walk outdoors",
-      when: "After lunch or before dinner, whichever is easier to protect",
-      howOften: "For 10 consecutive days",
-      benefit: "If activity and food intake support a mild calorie deficit, a small gradual improvement in weight and energy may be possible — around 0.5 kg over ~10 days for some people. Results vary substantially by person.",
-      consequence: "If activity does not increase, current inactivity may continue and your movement-related goal may remain unchanged.",
+      what: "Do a 30-minute brisk walk (or a beginner-level yoga session from Ministry of AYUSH) after lunch",
+      when: "Today, then four more days this week",
+      howOften: "10 sessions over 14 days",
+      benefit: "If activity is repeated for 10 days and food intake supports a small calorie deficit, a gradual improvement in energy and possibly weight may occur (approximately 0.5 kg for some people; results vary).",
+      consequence: "If activity does not increase, current inactivity patterns tend to persist and any movement-related goal will remain unchanged.",
     };
   }
   return {
-    what: "Add one 10-minute breathing or short-mobility session to an existing daily routine",
+    what: "Add one 10-minute mobility or breathing session (Ministry of AYUSH Yoga Break has free 5–10 minute sequences) to an existing daily routine",
     when: "Right after brushing your teeth in the morning",
-    howOften: "Every day for the next 10 days",
-    benefit: "If practised consistently, stress and energy variability may reduce over the 10-day window.",
-    consequence: "If skipped, current stress and energy patterns are likely to remain unchanged.",
+    howOften: "Every day for 10 days",
+    benefit: "If practised for 10 days, day-to-day stress and energy variability tend to reduce noticeably.",
+    consequence: "If skipped, current stress and energy patterns will likely remain unchanged.",
   };
 };
 
 const CAREER_BEHAVIOURS = (a) => {
   const career = a.career || {};
-  const target = career.targetRole || "your target role";
+  const target = career.targetRole;
+  const track = inferSkillTrack(target || career.goal || "");
+
   if (career.goal === "Career switch" && !career.targetRole) {
     return {
-      what: "Name one specific target role and one industry you're moving into",
+      what: "Name one specific target role and one industry you're moving into, then check its skill signature on the BLS Occupational Outlook Handbook",
       when: "Tonight, before opening any job board",
-      howOften: "Once — this becomes the anchor for the next steps",
-      benefit: "If a specific target role is named, your skill map and applications become measurably sharper.",
-      consequence: "If the target stays vague, applications may continue to feel scattered and results may remain inconsistent.",
+      howOften: "Once — this becomes the anchor for every step below",
+      benefit: "If a specific target is named, the next 30 days of learning and applications compound in one direction.",
+      consequence: "If the target stays vague, applications and courses tend to stay scattered and results remain inconsistent.",
     };
   }
+  const targetPhrase = target ? `\"${target}\"` : "your target role";
   return {
-    what: `List three skills required for ${target} and mark the one clearest gap`,
-    when: "At 6:00 pm today",
-    howOften: "One 30-minute session; revisit weekly",
-    benefit: "If a specific skill gap is named, learning time can compound toward roles that expect that skill.",
-    consequence: `If the skill gap for ${target} stays unnamed, you may remain less competitive for roles requiring it.`,
+    what: `Build ${track.label}. Start ${track.course} this week and complete two lessons. This complements your existing background and supports ${targetPhrase}.`,
+    when: "At 6:00 pm today, then two more 30-minute sessions this week",
+    howOften: "Two 30-minute sessions per week for four weeks; end with one small evidence project",
+    benefit: `If ${track.label} is built with one demonstrable project, readiness for ${targetPhrase} improves and your background becomes a stronger match.`,
+    consequence: `If this specific skill gap stays unnamed and unbuilt, you may continue to be filtered out of ${targetPhrase} shortlists.`,
   };
 };
 
 const MONEY_BEHAVIOURS = (a) => {
   const money = a.money || {};
   const goals = Array.isArray(money.moneyGoals) ? money.moneyGoals : [];
-  if (money.emergency === "None" || money.emergency === "Less than 1 month") {
+  const frictions = Array.isArray(money.frictions) ? money.frictions : [];
+  const noEmergency = money.emergency === "None" || money.emergency === "Less than 1 month";
+  const hasDebt = money.debt === "Yes";
+  const noInvestKnow = frictions.includes("Lack of investment knowledge");
+
+  if (hasDebt && goals.includes("Debt reduction")) {
     return {
-      what: "Set a first emergency-fund milestone equal to one month of essential expenses",
-      when: "This weekend, in one 30-minute review",
-      howOften: "Track once per month",
-      benefit: "If a first milestone is reached, an unexpected expense is less likely to derail your other goals.",
-      consequence: "If no milestone is set, one unexpected expense could reset progress on your other money goals.",
+      what: "List every high-interest debt with its outstanding amount and interest rate on one page, then plan the next payment against the highest-rate balance first",
+      when: "This weekend, in one 30-minute session",
+      howOften: "Refresh monthly; automate the priority payment",
+      benefit: "If the highest-rate debt gets consistent priority, total interest paid drops and the timeline to debt-free shortens.",
+      consequence: "If balances remain uncatalogued, higher-rate interest may keep compounding and slow every other money goal.",
     };
   }
-  if (goals.includes("Debt reduction") || money.debt === "Yes") {
+  if (noEmergency) {
     return {
-      what: "List every high-interest debt with amount and interest rate on one page",
-      when: "This weekend, in one 30-minute session",
-      howOften: "Refresh monthly",
-      benefit: "If listed and ordered by interest rate, the next payment can prioritise the costliest debt first.",
-      consequence: "If left uncatalogued, higher-rate balances may keep growing while other repayments continue.",
+      what: "Set your first emergency-fund milestone equal to one month of essential expenses; open a separate high-yield/liquid account only for this",
+      when: "This weekend, in one 30-minute review",
+      howOften: "Automated monthly transfer; review size every quarter",
+      benefit: "If a one-month cushion is reached, one unexpected expense is less likely to reset progress on your other money goals.",
+      consequence: "If no cushion is built, a single unplanned expense can force you into debt or derail other goals.",
+    };
+  }
+  if (noInvestKnow || money.investments === "None") {
+    return {
+      what: "Complete the free SEBI Investor 'Financial Planning' primer and AMFI's 'Introduction to Mutual Funds' — treat this as pre-work before any product decision",
+      when: "One 30-minute session tonight; one this weekend",
+      howOften: "Complete both modules within seven days",
+      benefit: "If investor-education modules are completed first, product decisions tend to be lower-cost and better matched to the goals you've selected.",
+      consequence: "If skipped, early product choices are often driven by advertising rather than fit — the mistakes are quiet but expensive.",
     };
   }
   return {
-    what: "Review one week of discretionary spending and circle the biggest recurring leak",
+    what: "Review one week of discretionary spending and circle the biggest recurring leak; cancel or resize one recurring item",
     when: "Before dinner today",
-    howOften: "One 20-minute review; repeat weekly",
-    benefit: "If the biggest leak is identified and reduced, monthly savings may increase without lifestyle disruption.",
-    consequence: "If recurring costs remain unreviewed, small leaks may continue to accumulate each month.",
+    howOften: "One 20-minute review this week; repeat monthly",
+    benefit: "If one recurring leak is trimmed, monthly savings can increase without any lifestyle disruption — the smallest lever with the most compounding.",
+    consequence: "If recurring costs stay unreviewed, small leaks continue to accumulate every month.",
   };
 };
 
 const PRODUCTIVITY_BEHAVIOURS = (a) => {
   const p = a.productivity || {};
+  const many = p.unfinished === "4–6" || p.unfinished === "7+";
+  const distraction = (a.productivity && a.productivity.frictions || []).includes("Distractions");
+  const meetings = (a.productivity && a.productivity.frictions || []).includes("Too many meetings");
+
+  if (meetings) {
+    return {
+      what: "Audit the past two weeks of your calendar and mark three recurring meetings you can decline, shorten or move async (try AI meeting-summary tools like Otter or Microsoft Copilot for the ones that stay)",
+      when: "In one 30-minute session tomorrow morning",
+      howOften: "Repeat every quarter",
+      benefit: "If three meetings are removed or shortened, you recover a full focused block per week — the fastest path to fewer unfinished priorities.",
+      consequence: "If the calendar stays as is, unfinished priorities are unlikely to reduce because focus time isn't protected.",
+    };
+  }
+  if (distraction) {
+    return {
+      what: "Block a 30-minute focus session, disable non-essential notifications and use a website blocker (Cold Turkey, One Sec, or your OS Focus mode) for one recurring app",
+      when: `${p.energyPeriod ? `During your ${p.energyPeriod.toLowerCase()} energy peak, tomorrow` : "Tomorrow morning"}, before opening email`,
+      howOften: "Five sessions this week",
+      benefit: "If distractions are pre-blocked, the same 30 minutes produces about 2× the output — measurable within a week.",
+      consequence: "If distractions stay unmanaged, you'll continue paying an attention tax on every task.",
+    };
+  }
   return {
-    what: `Complete one 30-minute focus block on your most postponed priority${p.energyPeriod ? ` during your ${p.energyPeriod.toLowerCase()} peak` : ""}`,
-    when: "Before opening any non-essential app or meeting",
-    howOften: "Once today; repeat 5 weekdays",
-    benefit: "If the block runs on 5 weekdays, the number of overdue priorities may drop noticeably over the next month.",
-    consequence: `If postponement continues${p.postponing ? ` (currently ${p.postponing.toLowerCase()})` : ""}, deadline pressure may compound and rework may increase.`,
+    what: `Complete one 30-minute focus block on the priority whose delay hurts most${many ? " — pick from your unfinished list, not from email" : ""}`,
+    when: `${p.energyPeriod ? `During your ${p.energyPeriod.toLowerCase()} peak` : "Tomorrow morning"}, before opening non-essential apps`,
+    howOften: "Five sessions this week",
+    benefit: "If five focused blocks run in one week, the number of overdue priorities is likely to visibly drop.",
+    consequence: `If postponement continues${p.postponing ? ` (currently ${p.postponing.toLowerCase()})` : ""}, deadline pressure will keep compounding and rework will keep growing.`,
   };
 };
 
 const LEARNING_BEHAVIOURS = (a) => {
   const l = a.learning || {};
   const skill = l.targetSkill || "your target skill";
+  const track = inferSkillTrack(skill);
+  const short = l.time === "Less than 1 hour";
+
   return {
-    what: `Spend 30 minutes on one project-based lesson toward ${skill}`,
-    when: "Tonight",
-    howOften: "3 sessions this week; then reassess",
-    benefit: `If sessions run consistently, readiness for roles requiring ${skill} may improve over the next 30 days.`,
-    consequence: `If skill practice is skipped, readiness for roles requiring ${skill} may not change.`,
+    what: `Complete 30 minutes of ${track.course} tonight and finish one project-based lesson on ${skill}`,
+    when: "Tonight; then two more sessions this week",
+    howOften: short ? "Three 20-minute sessions this week (respecting your limited time budget)" : "Three 30-minute project-based sessions this week",
+    benefit: `If sessions run consistently, readiness for roles that require ${skill} improves and the skill starts showing up on your résumé as evidence, not intent.`,
+    consequence: `If practice keeps slipping, ${skill} will remain a signal on your résumé but not a demonstrated capability.`,
   };
 };
 
@@ -156,11 +246,23 @@ const RELATIONSHIP_BEHAVIOURS = (a) => {
   const r = a.relationships || {};
   const who = (r.area || "the person").toLowerCase();
   const focus = (r.focus || "communication").toLowerCase();
+  const frictions = Array.isArray(r.frictions) ? r.frictions : [];
+  const conflict = frictions.includes("Conflict");
+
+  if (conflict) {
+    return {
+      what: `Book a specific 20-minute conversation with your ${who} using the Greater Good Science Center's 'active constructive responding' prompt — name one thing you appreciate, one thing you'd like different, one small ask`,
+      when: "Within the next 48 hours, at a time you both control",
+      howOften: "One structured conversation now; one follow-up in 10 days",
+      benefit: `If the conversation happens, ${focus} may improve and coordination or closeness may steady across the next weeks.`,
+      consequence: `If left unaddressed, ${conflict ? "the current friction" : "the pattern"} usually compounds and grows harder to repair.`,
+    };
+  }
   return {
     what: `Send one thoughtful message to your ${who} that names one thing you appreciate and asks for a 15-minute conversation about ${focus}`,
     when: "Tonight before bed",
-    howOften: "One message today; one follow-up within the week",
-    benefit: `If the conversation happens, ${focus} may improve and coordination or closeness may steady over the coming weeks.`,
+    howOften: "One message today; one 15-minute conversation this week",
+    benefit: `If the conversation happens, ${focus} may improve and the relationship may steady across the coming weeks.`,
     consequence: `If nothing is initiated, current ${focus} patterns are likely to continue unchanged.`,
   };
 };
@@ -179,7 +281,6 @@ export const getBehaviour = (areaKey, assessment) => (BEHAVIOURS[areaKey] || PRO
 export const getPrimarySource = (areaKey) => (SOURCES[areaKey] || SOURCES.productivity)[0];
 export const getSources = (areaKey) => SOURCES[areaKey] || SOURCES.productivity;
 
-// Safety disclaimers per area
 export const DISCLAIMER = {
   health: "General education only; not medical advice or a treatment plan.",
   career: "Job availability and outcomes vary; this does not guarantee employment.",

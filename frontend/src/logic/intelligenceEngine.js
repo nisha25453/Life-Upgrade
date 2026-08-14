@@ -1,24 +1,16 @@
 import { LIFE_AREAS } from "./assessmentModel";
-import { DISCLAIMER, getBehaviour, getPrimarySource, getSources } from "./recommendationCatalog";
+import { DISCLAIMER, getBehaviour, getPrimarySource, getSources, inferSkillTrack } from "./recommendationCatalog";
 
 // =============================================================================
 // SCORING SEMANTICS (v2)
-// -----------------------------------------------------------------------------
-//   1 = strongest / lowest need for attention
-//   10 = weakest / highest need for attention
-//
-// Dimension score interpretation:
-//   1–2  strong
-//   3–4  good
-//   5–6  moderate
-//   7–8  needs attention
-//   9–10 critical priority
-//
-// The Life Score displayed as X / 100 stays "higher is better" (inverted from
-// the 1–10 dimension scale) so the headline number matches user intuition.
+//   1 = strongest, 10 = needs most attention.
+//   Life Score X / 100 stays "higher is better" (inverted headline number).
+// v3 INSIGHT UPGRADE (2026-02-11):
+//   Every insight now derives from ≥ 2 of the user's actual answers.
+//   New pattern detector powers the Life Twin ("Patterns worth noticing").
+//   Current State returns 2–3 findings; Next Best Action names goal + area + obstacle.
 // =============================================================================
 
-// ---------- Base scoring ----------
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
 export const averageRating = (ratings) =>
@@ -26,7 +18,6 @@ export const averageRating = (ratings) =>
 
 export const calculateScore = (ratings) => {
   const avg = averageRating(ratings);
-  // Map 1 → 100, 5.5 → 50, 10 → 0.
   return Math.round(clamp((10 - avg) * 100 / 9, 0, 100));
 };
 
@@ -36,7 +27,6 @@ export const getStrongestArea = (ratings) =>
 export const getMostUrgentArea = (ratings) =>
   LIFE_AREAS.reduce((most, area) => (Number(ratings[area.key]) > Number(ratings[most.key]) ? area : most), LIFE_AREAS[0]);
 
-// Backward-compatible alias (was `getLowestArea` under old semantics).
 export const getLowestArea = getMostUrgentArea;
 
 export const dimensionLabel = (rating) => {
@@ -74,33 +64,234 @@ export const getObstacleSummary = (assessment) => {
 
 const frictionsFor = (assessment, key) => (assessment[key] && assessment[key].frictions) || [];
 
-// ---------- MY CURRENT STATE ----------
+// =============================================================================
+// PATTERN DETECTOR — new in v3
+// Detects meaningful combinations of answers across dimensions. Each pattern
+// carries: pattern name, what it suggests, one specific tip, and a priority
+// number for sorting. Used by Life Twin ("Patterns worth noticing").
+// =============================================================================
+
+const detectPatterns = (assessment) => {
+  const r = assessment.ratings;
+  const money = assessment.money || {};
+  const career = assessment.career || {};
+  const health = assessment.health || {};
+  const productivity = assessment.productivity || {};
+  const learning = assessment.learning || {};
+  const relationships = assessment.relationships || {};
+  const obstacles = getObstacleList(assessment);
+  const moneyFrictions = frictionsFor(assessment, "money");
+  const relFrictions = frictionsFor(assessment, "relationships");
+  const patterns = [];
+
+  // Wealth-building foundation
+  if (r.money >= 6 && (money.debt === "Yes" || money.emergency === "None" || money.investments === "None")) {
+    const parts = [];
+    if (money.debt === "Yes") parts.push("high-interest debt");
+    if (money.emergency === "None") parts.push("no emergency fund");
+    if (money.investments === "None") parts.push("no regular investing");
+    const joined = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+    patterns.push({
+      key: "wealth-foundation",
+      pattern: "Wealth-building foundation is thin",
+      suggests: `You flagged ${joined}. Foundational blocks come before wealth products.`,
+      tip: "Before any new investment, size a first emergency-fund milestone equal to one month of essentials and list any debts above 12% interest. SEBI Investor and AMFI both have free investor-education modules that walk through this without product pitches.",
+      priority: 1,
+    });
+  }
+
+  // Recovery/routine stack
+  const sleepPoor = health.sleep === "Poor" || health.sleep === "Fair";
+  const lowExercise = health.exercise === "Rarely" || health.exercise === "1–2 days/week";
+  if (sleepPoor && health.stress === "High" && lowExercise) {
+    patterns.push({
+      key: "recovery",
+      pattern: "Recovery routine is under-load",
+      suggests: `Poor sleep (${health.sleep}), high stress and ${health.exercise} exercise are stacking — each amplifies the other.`,
+      tip: "Fix the sleep window first: same lights-off time for 10 nights, phone left outside the bedroom. WHO's physical-activity guidance plus a 10-minute walk after lunch adds movement without willpower cost.",
+      priority: 1,
+    });
+  }
+
+  // Career transition without a bridge
+  if (career.goal === "Career switch" && career.targetRole && r.career >= 5) {
+    const track = inferSkillTrack(career.targetRole);
+    patterns.push({
+      key: "career-transition",
+      pattern: "Career transition needs a bridge, not a leap",
+      suggests: `You're targeting "${career.targetRole}" while your career is at ${r.career}/10 today. Applications tend to underperform when the skill map isn't specific yet.`,
+      tip: `List three skills the target role expects that your current role does not build. Pick one gap. ${track.course} is a good first bridge, closed with one small evidence project.`,
+      priority: 2,
+    });
+  }
+
+  // Career + Learning misalignment
+  if (career.targetRole && r.career >= 5 && r.learning >= 6) {
+    patterns.push({
+      key: "career-learning-misalign",
+      pattern: "Career and learning are moving in opposite directions",
+      suggests: `You want to move toward "${career.targetRole}" but learning is at ${r.learning}/10 while career is at ${r.career}/10. Career gains without learning gains rarely stick.`,
+      tip: `Pick one specific skill your target role requires and complete two short modules this week. Microsoft Learn's role-based paths give a starting map without paywalls.`,
+      priority: 2,
+    });
+  }
+
+  // Execution loop
+  if (obstacles.includes("Procrastination")
+    && (productivity.unfinished === "4–6" || productivity.unfinished === "7+")
+    && (assessment.consistency === "Rarely" || assessment.consistency === "Sometimes")) {
+    patterns.push({
+      key: "execution",
+      pattern: "Execution loop is broken, not effort",
+      suggests: `You have ${productivity.unfinished} unfinished priorities, procrastination as a stated obstacle, and ${assessment.consistency.toLowerCase()} consistency — that's a scheduling problem, not a motivation problem.`,
+      tip: "Pick the priority whose delay hurts most. Do a single 30-minute focus block on it before opening email tomorrow. Then close one other unfinished item during the same block over the next three days.",
+      priority: 2,
+    });
+  }
+
+  // Skill-development budget too small
+  if (learning.targetSkill && r.learning >= 5 && (learning.time === "Less than 1 hour" || obstacles.includes("Lack of time"))) {
+    patterns.push({
+      key: "skill-dev",
+      pattern: "Skill-development time budget is undersized",
+      suggests: `You named "${learning.targetSkill}" as the skill to build, but limited weekly time can stall project-based learning.`,
+      tip: `Compress rather than skip: three 30-minute sessions on ${learning.targetSkill} beat one 90-minute session. SWAYAM, NPTEL and Microsoft Learn all have modular tracks matched to that pace.`,
+      priority: 3,
+    });
+  }
+
+  // Investment knowledge before investment decisions
+  if (moneyFrictions.includes("Lack of investment knowledge") && (money.investments === "None" || money.investments === "Occasional")) {
+    patterns.push({
+      key: "money-knowledge",
+      pattern: "Investment knowledge gap before investment decisions",
+      suggests: "You flagged limited investment knowledge and irregular investing. Knowledge before product reduces expensive early mistakes.",
+      tip: "Complete SEBI Investor's Financial Planning primer and AMFI's Mutual Fund modules before any product decision. If retirement is a stated goal, PFRDA's NPS resources are the official starting point.",
+      priority: 3,
+    });
+  }
+
+  // Communication debt
+  if (r.relationships >= 6 && (relFrictions.includes("Conflict") || relFrictions.includes("Communication"))) {
+    patterns.push({
+      key: "communication-debt",
+      pattern: "Communication debt is compounding",
+      suggests: `${relationships.area || "The relationship"} you flagged is at ${r.relationships}/10 with ${relFrictions.includes("Conflict") ? "unresolved conflict" : "communication friction"}. Small clarifications now prevent large repairs later.`,
+      tip: "Book one 15-minute focused conversation this week — one thing you appreciate, one thing you'd like different, one small ask. Greater Good Science Center has short research-backed prompts you can adapt.",
+      priority: 2,
+    });
+  }
+
+  // Meetings-eat-focus pattern
+  const prodFrictions = frictionsFor(assessment, "productivity");
+  if (prodFrictions.includes("Too many meetings") && r.productivity >= 6) {
+    patterns.push({
+      key: "meetings-eat-focus",
+      pattern: "Meetings are eating focus time",
+      suggests: `Productivity is at ${r.productivity}/10 with 'too many meetings' selected as friction. Focus time can't be created without editing the calendar.`,
+      tip: "Audit the past two weeks and mark three recurring meetings you can decline, shorten or move async. Microsoft Copilot / Otter can summarise the ones that stay so you don't have to attend live.",
+      priority: 2,
+    });
+  }
+
+  // Goal ambiguity
+  if (!assessment.goal || assessment.goal.trim().length < 12) {
+    patterns.push({
+      key: "goal-clarity",
+      pattern: "The headline goal isn't specific yet",
+      suggests: "A short or missing goal makes every recommendation below less sharp.",
+      tip: "Rewrite your goal so it names one measurable outcome and a time-box (e.g., 'complete Power BI basics and ship one dashboard in 30 days'). This alone often changes what shows up in Top 3 below.",
+      priority: 4,
+    });
+  }
+
+  return patterns.sort((a, b) => a.priority - b.priority);
+};
+
+// =============================================================================
+// MY CURRENT STATE — v3
+// Returns 2–3 findings joined into one paragraph so the existing panel
+// renders unchanged. Every finding uses ≥ 2 of the user's actual answers.
+// =============================================================================
+
 export const buildCurrentState = (assessment) => {
   const strongest = getStrongestArea(assessment.ratings);
   const urgent = getMostUrgentArea(assessment.ratings);
-  const goal = (assessment.goal || "").trim();
-  const mainFriction = frictionsFor(assessment, urgent.key)[0] || getPrimaryObstacle(assessment) || "an unclear routine";
   const strengthScore = assessment.ratings[strongest.key];
   const urgentScore = assessment.ratings[urgent.key];
+  const goal = (assessment.goal || "").trim();
+  const findings = [];
 
-  const goalClause = goal
-    ? ` Your stated goal is to ${goal.toLowerCase().replace(/\.$/, "")}.`
-    : " You have not stated a headline goal yet — naming one sharpens everything below.";
+  // Finding 1 — Strongest anchor
+  findings.push(`Your strongest area is ${strongest.label} at ${strengthScore}/10 (lower is stronger) — that's a real anchor for the moves below.`);
+
+  // Finding 2 — Urgent area with goal or friction cross-reference
+  const urgentFriction = frictionsFor(assessment, urgent.key)[0] || getPrimaryObstacle(assessment);
+  if (urgent.key === "career" && (assessment.career || {}).targetRole) {
+    const track = inferSkillTrack(assessment.career.targetRole);
+    findings.push(`${urgent.label} is currently your biggest gap at ${urgentScore}/10, while your target is "${assessment.career.targetRole}". Your existing background is a strength, but the answers suggest a specific ${track.label} skill gap.`);
+  } else if (urgent.key === "money" && Array.isArray(assessment.money?.moneyGoals) && assessment.money.moneyGoals.length) {
+    findings.push(`${urgent.label} is at ${urgentScore}/10 with money goals ${assessment.money.moneyGoals.join(", ")}. The current answers suggest foundational steps (emergency fund, basic investor education) come before any product decision.`);
+  } else if (urgent.key === "learning" && (assessment.learning || {}).targetSkill) {
+    findings.push(`${urgent.label} is at ${urgentScore}/10 while your target skill is "${assessment.learning.targetSkill}". The time budget and format you selected are the levers that matter here — not more courses.`);
+  } else if (urgentFriction) {
+    findings.push(`${urgent.label} is at ${urgentScore}/10 with ${urgentFriction.toLowerCase()} flagged as friction${goal ? ` against your goal to ${goal.toLowerCase().replace(/\.$/, "")}` : ""}.`);
+  } else if (goal) {
+    findings.push(`${urgent.label} is at ${urgentScore}/10 against your stated goal to ${goal.toLowerCase().replace(/\.$/, "")} — that's the mismatch to close first.`);
+  } else {
+    findings.push(`${urgent.label} is at ${urgentScore}/10 and needs attention before other goals can move.`);
+  }
+
+  // Finding 3 — One meaningful pattern (top-priority detected pattern)
+  const patterns = detectPatterns(assessment);
+  if (patterns[0]) {
+    findings.push(`Pattern worth noticing: ${patterns[0].pattern.toLowerCase()} — ${patterns[0].suggests}`);
+  }
 
   return {
     strongest,
     urgent,
-    summary: `Your strongest area is ${strongest.label} at ${strengthScore}/10 (lower is stronger), while ${urgent.label} is currently your biggest gap at ${urgentScore}/10.${goalClause} The friction most likely slowing you down is ${mainFriction.toLowerCase()}.`,
+    findings,
+    summary: findings.join(" "),
   };
 };
 
-// ---------- PRIORITY ENGINE ----------
+// =============================================================================
+// LIFE TWIN — v3
+// Returns three "patterns worth noticing" strings. Each includes:
+//   PATTERN — what it suggests, and ONE specific tip.
+// If < 3 patterns detected, fills in with a specific-not-generic guidance line.
+// =============================================================================
+
+export const buildTwinInsights = (assessment) => {
+  const patterns = detectPatterns(assessment);
+  const chosen = patterns.slice(0, 3);
+  const insights = chosen.map((p) => `${p.pattern} — ${p.suggests} ${p.tip}`);
+  if (insights.length < 3) {
+    const strongest = getStrongestArea(assessment.ratings);
+    const urgent = getMostUrgentArea(assessment.ratings);
+    const fallbackLine = insights.length < 3
+      ? `Anchor pattern — ${strongest.label} at ${assessment.ratings[strongest.key]}/10 can carry a small ${urgent.label.toLowerCase()} action. Pair a fixed cue you already keep (morning coffee, commute end) with a 30-minute ${urgent.label.toLowerCase()} block this week.`
+      : null;
+    if (fallbackLine && insights.length === 2) insights.push(fallbackLine);
+    if (insights.length < 3) {
+      const [top] = getTopThreePriorities(assessment);
+      if (top) insights.push(`Action pattern — for ${top.area.label} at ${top.currentScore}/10, the specific move is: ${top.recommendation.what.toLowerCase()}, ${top.recommendation.when.toLowerCase()}.`);
+    }
+  }
+  return insights.slice(0, 3);
+};
+
+// =============================================================================
+// PRIORITY ENGINE (unchanged shape, tightened copy)
+// =============================================================================
+
 const GOAL_KEYWORDS = {
-  health: ["health", "weight", "sleep", "energy", "fit", "run", "gym", "diet", "stress"],
-  career: ["career", "promot", "job", "role", "salary", "raise", "switch", "manager"],
+  health: ["health", "weight", "sleep", "energy", "fit", "run", "gym", "diet", "stress", "yoga"],
+  career: ["career", "promot", "job", "role", "salary", "raise", "switch", "manager", "consult", "strategy", "product"],
   money: ["money", "save", "saving", "finance", "invest", "debt", "sip", "retire", "emergency", "insurance", "tax"],
   productivity: ["productiv", "focus", "procrast", "priorit", "meeting", "task", "deadline"],
-  learning: ["learn", "skill", "course", "study", "certif", "power bi", "sql", "python", "language"],
+  learning: ["learn", "skill", "course", "study", "certif", "power bi", "sql", "python", "language", "product management"],
   relationships: ["relationship", "family", "partner", "spouse", "friend", "communicat", "team", "conflict"],
 };
 
@@ -122,7 +313,7 @@ export const buildPriorityScores = (assessment) => {
     const rating = Number(assessment.ratings[area.key]);
     const frictions = frictionsFor(assessment, area.key);
     const goalBoost = goalMentionsArea(goal, area.key) ? 1.5 : 0;
-    const frictionBoost = Math.min(frictionsFor(assessment, area.key).length, 3) * 0.3;
+    const frictionBoost = Math.min(frictions.length, 3) * 0.3;
     const consistencyBoost = consistencyPenalty(consistency);
     const urgency = rating + goalBoost + frictionBoost + consistencyBoost;
     return { area, rating, frictions, goalBoost, urgency };
@@ -155,12 +346,16 @@ export const getTopThreePriorities = (assessment, actions = {}) => {
     const source = getPrimarySource(entry.area.key);
     const priorityKey = `priority-${entry.area.key}`;
     const state = actions[priorityKey] || { status: "pending" };
+    const whyThisMatters = entry.goalBoost > 0
+      ? `Your goal (${(assessment.goal || "").toLowerCase().replace(/\.$/, "") || "the goal you stated"}) points here directly, and the ${entry.rating}/10 score means it will not move on its own.`
+      : `A ${entry.rating}/10 score with ${(entry.frictions[0] || getPrimaryObstacle(assessment) || "current friction").toLowerCase()} means small drift becomes large drift without a scheduled action.`;
     return {
       key: priorityKey,
       tier: TIERS[index] || "OPPORTUNITY",
       area: entry.area,
       currentScore: entry.rating,
       goal: areaGoalText(assessment, entry.area.key),
+      whyThisMatters,
       problem: buildProblemLine(entry, assessment),
       recommendation: behaviour,
       benefit: behaviour.benefit,
@@ -173,32 +368,23 @@ export const getTopThreePriorities = (assessment, actions = {}) => {
   });
 };
 
-// ---------- LIFE TWIN (coach synthesis, 3 rich paragraphs) ----------
-export const buildTwinInsights = (assessment) => {
-  const state = buildCurrentState(assessment);
-  const priorities = getTopThreePriorities(assessment);
-  const top = priorities[0];
-  if (!top) return [];
-  const consistency = (assessment.consistency || "Inconsistent").toLowerCase();
-  const summary = getObstacleSummary(assessment) || "current friction";
+// =============================================================================
+// NEXT BEST ACTION — v3 (explicitly connects goal + urgent area + obstacle)
+// =============================================================================
 
-  return [
-    `What is happening — ${state.summary} The rating pattern suggests ${top.area.label.toLowerCase()} is what most needs a decision this week.`,
-    `Why it matters — ${top.area.label} at ${top.currentScore}/10 collides with ${summary}. Under a ${consistency} rhythm, without a specific behaviour to break the cycle, this area is unlikely to move on its own.`,
-    `What to do vs. what happens if you don't — ${top.recommendation.what.toLowerCase()} on ${top.recommendation.when.toLowerCase()}. If you do this consistently, ${top.benefit.toLowerCase()} If you don't, ${top.consequence.toLowerCase()}`,
-  ];
-};
-
-// ---------- NEXT BEST ACTION ----------
 export const buildNextAction = (assessment, actions = {}) => {
   const [top] = getTopThreePriorities(assessment, actions);
   if (!top) return null;
+  const goal = (assessment.goal || "").trim();
+  const obstacle = getPrimaryObstacle(assessment);
+  const goalClause = goal ? `your goal to ${goal.toLowerCase().replace(/\.$/, "")}` : "your assessment answers";
+  const obstacleClause = obstacle ? ` and directly counters ${obstacle.toLowerCase()} as your stated obstacle` : "";
   return {
     key: "nba",
     what: top.recommendation.what,
     when: top.recommendation.when,
     howOften: top.recommendation.howOften,
-    why: `${top.area.label} is at ${top.currentScore}/10 and ranks as your most urgent lever right now — ${top.problem.toLowerCase()}`,
+    why: `${top.area.label} is at ${top.currentScore}/10 and is the most urgent lever for ${goalClause}${obstacleClause}.`,
     ifYouDo: top.benefit,
     ifYouDont: top.consequence,
     timeRequired: "About 30 minutes today, then a repeat cadence",
@@ -209,8 +395,12 @@ export const buildNextAction = (assessment, actions = {}) => {
   };
 };
 
-// ---------- FUTURE SELF · HORIZONS ----------
-const projectAt = (currentScore, deltaPer10Days, days) => clamp(Math.round(currentScore + (deltaPer10Days * days) / 10), 0, 100);
+// =============================================================================
+// FUTURE SELF (unchanged — content-only spec kept these sections stable)
+// =============================================================================
+
+const projectAt = (currentScore, deltaPer10Days, days) =>
+  clamp(Math.round(currentScore + (deltaPer10Days * days) / 10), 0, 100);
 
 export const buildFutureHorizons = (score, assessment, actions = {}) => {
   const top = buildNextAction(assessment, actions);
@@ -259,74 +449,41 @@ export const buildFutureHorizons = (score, assessment, actions = {}) => {
 
   const per = perAreaHorizon[areaKey];
   const currentPace = acted ? 3 : 0;
-  const trendNote = acted ? "You have completed the recommended action — the projection reflects momentum from that decision." : "You have not yet completed the recommended action — this projection assumes you begin today.";
+  const trendNote = acted
+    ? "You have completed the recommended action — the projection reflects momentum from that decision."
+    : "You have not yet completed the recommended action — this projection assumes you begin today.";
 
   return {
-    today: {
-      label: "Today",
-      note: top ? `Complete: ${top.what}.` : "Take the assessment first.",
-    },
-    days10: {
-      label: "10 days",
-      projected: projectAt(score, currentPace + 3, 10),
-      note: per.days10,
-    },
-    days30: {
-      label: "30 days",
-      projected: projectAt(score, currentPace + 3, 30),
-      note: per.days30,
-    },
-    year1: {
-      label: "1 year",
-      projected: clamp(score + currentPace + 12, 0, 100),
-      note: per.year1,
-    },
-    years10: {
-      label: "10 years",
-      projected: clamp(score + currentPace + 20, 0, 100),
-      note: per.years10,
-    },
+    today: { label: "Today", note: top ? `Complete: ${top.what}.` : "Take the assessment first." },
+    days10: { label: "10 days", projected: projectAt(score, currentPace + 3, 10), note: per.days10 },
+    days30: { label: "30 days", projected: projectAt(score, currentPace + 3, 30), note: per.days30 },
+    year1: { label: "1 year", projected: clamp(score + currentPace + 12, 0, 100), note: per.year1 },
+    years10: { label: "10 years", projected: clamp(score + currentPace + 20, 0, 100), note: per.years10 },
     trendNote,
   };
 };
 
-// ---------- FUTURE SELF · 3 TRAJECTORIES ----------
 export const buildFutureScenarios = (score, assessment, actions = {}) => {
   const [top] = getTopThreePriorities(assessment, actions);
   const areaLabel = top ? top.area.label : "your top area";
   const acted = top && top.status === "completed";
   const upgradeGain = acted ? 14 : 10;
   return [
-    {
-      key: "current",
-      label: "Current trajectory",
-      projected: clamp(score + 3, 0, 100),
-      delta: "+3",
-      note: `If today's rhythm continues, ${areaLabel.toLowerCase()} moves slowly. Progress is real but modest — a useful baseline.`,
-    },
-    {
-      key: "upgrade",
-      label: "Upgrade trajectory",
-      projected: clamp(score + upgradeGain, 0, 100),
-      delta: `+${upgradeGain}`,
-      note: `If the recommended ${areaLabel.toLowerCase()} behaviour is performed consistently, most of the 30-day gain sits here — assuming actions are actually taken.`,
-    },
-    {
-      key: "neglect",
-      label: "Neglect trajectory",
-      projected: clamp(score - 5, 0, 100),
-      delta: "-5",
-      note: `If important actions are repeatedly ignored, ${(getObstacleSummary(assessment) || "current friction").toLowerCase()} may compound and baseline may erode. Risk case, not a prediction.`,
-    },
+    { key: "current", label: "Current trajectory", projected: clamp(score + 3, 0, 100), delta: "+3",
+      note: `If today's rhythm continues, ${areaLabel.toLowerCase()} moves slowly. Progress is real but modest — a useful baseline.` },
+    { key: "upgrade", label: "Upgrade trajectory", projected: clamp(score + upgradeGain, 0, 100), delta: `+${upgradeGain}`,
+      note: `If the recommended ${areaLabel.toLowerCase()} behaviour is performed consistently, most of the 30-day gain sits here — assuming actions are actually taken.` },
+    { key: "neglect", label: "Neglect trajectory", projected: clamp(score - 5, 0, 100), delta: "-5",
+      note: `If important actions are repeatedly ignored, ${(getObstacleSummary(assessment) || "current friction").toLowerCase()} may compound and baseline may erode. Risk case, not a prediction.` },
   ];
 };
 
-// ---------- LIFE RISK RADAR ----------
+// =============================================================================
+// LIFE RISK RADAR (unchanged shape; content already references user answers)
+// =============================================================================
+
 const levelFromScore = (rating) => (rating >= 9 ? "HIGH" : rating >= 7 ? "MEDIUM" : rating >= 5 ? "MEDIUM" : "LOW");
-
-// If the action associated with an area has been completed, downgrade risk one step and mark as "Improving".
 const improvedLevel = (level) => (level === "HIGH" ? "MEDIUM" : level === "MEDIUM" ? "LOW" : "LOW");
-
 const areaCompleted = (actions, areaKey) => {
   const entry = actions[`priority-${areaKey}`];
   return entry && entry.status === "completed";
@@ -364,11 +521,20 @@ export const buildRiskRadar = (assessment, actions = {}) => {
   });
 };
 
-// ---------- Per-dimension helper for expandable card ----------
+// =============================================================================
+// Per-dimension helper
+// =============================================================================
 export const getDimensionSummary = (assessment, key) => {
   const score = assessment.ratings[key];
   const frictions = frictionsFor(assessment, key);
   const risks = buildRiskRadar(assessment, {});
   const dimensionRisk = risks.find((risk) => risk.areaKey === key) || risks[0];
-  return { score, frictions, dimensionRisk, sources: getSources(key), behaviour: getBehaviour(key, assessment), disclaimer: DISCLAIMER[key] };
+  return {
+    score,
+    frictions,
+    dimensionRisk,
+    sources: getSources(key),
+    behaviour: getBehaviour(key, assessment),
+    disclaimer: DISCLAIMER[key],
+  };
 };
